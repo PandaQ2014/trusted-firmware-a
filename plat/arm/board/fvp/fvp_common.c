@@ -129,6 +129,8 @@ const mmap_region_t plat_arm_mmap[] = {
 	MAP_DEVICE0,
 	MAP_DEVICE1,
 	ARM_V2M_MAP_MEM_PROTECT,
+	ARM_MAP_NS_DRAM1,  //pxs VA:0x80000000  PA:0x80000000  size:0x7f000000  attr:0x1a  granularity:0x40000000
+	ARM_MAP_DRAM2,   //pxs  VA:0x880000000  PA:0x880000000  size:0x80000000  attr:0x1a  granularity:0x40000000
 #if ENABLE_SPM && SPM_DEPRECATED
 	ARM_SPM_BUF_EL3_MMAP,
 #endif

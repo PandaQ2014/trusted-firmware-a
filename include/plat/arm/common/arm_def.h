@@ -201,12 +201,12 @@
 #define ARM_MAP_NS_DRAM1		MAP_REGION_FLAT(		\
 						ARM_NS_DRAM1_BASE,	\
 						ARM_NS_DRAM1_SIZE,	\
-						MT_MEMORY | MT_RW | MT_NS)
+						MT_MEMORY | MT_RW | MT_SECURE) //MT_NS 改为MT_Secure pxs
 
 #define ARM_MAP_DRAM2			MAP_REGION_FLAT(		\
 						ARM_DRAM2_BASE,		\
 						ARM_DRAM2_SIZE,		\
-						MT_MEMORY | MT_RW | MT_NS)
+						MT_MEMORY | MT_RW | MT_SECURE) //MT_NS 改为MT_Secure pxs
 
 #define ARM_MAP_TSP_SEC_MEM		MAP_REGION_FLAT(		\
 						TSP_SEC_MEM_BASE,	\

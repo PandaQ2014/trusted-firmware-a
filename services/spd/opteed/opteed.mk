@@ -10,6 +10,7 @@ SPD_INCLUDES		:=
 SPD_SOURCES		:=	services/spd/opteed/opteed_common.c	\
 				services/spd/opteed/opteed_helpers.S	\
 				services/spd/opteed/opteed_main.c	\
-				services/spd/opteed/opteed_pm.c
+				services/spd/opteed/opteed_pm.c    \
+				services/spd/opteed/rkp_process.c
 
 NEED_BL32		:=	yes

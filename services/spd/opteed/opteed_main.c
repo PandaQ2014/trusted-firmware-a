@@ -30,6 +30,7 @@
 #include "opteed_private.h"
 #include "teesmc_opteed.h"
 #include "teesmc_opteed_macros.h"
+#include "rkp_process.h"
 
 /*******************************************************************************
  * Address of the entrypoint vector table in OPTEE. It is
@@ -201,7 +202,7 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 	uint32_t linear_id = plat_my_core_pos();
 	optee_context_t *optee_ctx = &opteed_sp_context[linear_id];
 	uint64_t rc;
-
+	uintptr_t result = NULL_PTR;
 	/*
 	 * Determine which security state this SMC originated from
 	 */
@@ -217,6 +218,14 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 
 		cm_el1_sysregs_context_save(NON_SECURE);
 
+		result =rkp_process(smc_fid,x1,x2,x3,x4,cookie,handle,flags);
+		
+		if(result != NULL_PTR){
+			/* Restore non-secure state */
+			cm_el1_sysregs_context_restore(NON_SECURE);
+			cm_set_next_eret_context(NON_SECURE);
+			return result;
+		}
 		/*
 		 * We are done stashing the non-secure context. Ask the
 		 * OPTEE to do the work now.

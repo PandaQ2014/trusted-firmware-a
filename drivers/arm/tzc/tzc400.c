@@ -174,6 +174,11 @@ void tzc400_configure_region(unsigned int filters,
 			  unsigned int sec_attr,
 			  unsigned int nsaid_permissions)
 {
+	if(tzc400.base == 0U){
+		tzc400_init(PLAT_ARM_TZC_BASE);
+		//tzc400_set_action(TZC_ACTION_ERR_INT);
+		tzc400_set_action(TZC_ACTION_NONE);
+	}
 	assert(tzc400.base != 0U);
 
 	/* Do range checks on filters and regions. */

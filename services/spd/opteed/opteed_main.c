@@ -216,16 +216,19 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 		 */
 		assert(handle == cm_get_context(NON_SECURE));
 
-		cm_el1_sysregs_context_save(NON_SECURE);
 
+		
 		result =rkp_process(smc_fid,x1,x2,x3,x4,cookie,handle,flags);
 		
 		if(result != NULL_PTR){
 			/* Restore non-secure state */
-			cm_el1_sysregs_context_restore(NON_SECURE);
+			//cm_el1_sysregs_context_restore(NON_SECURE);
 			cm_set_next_eret_context(NON_SECURE);
 			return result;
 		}
+
+		cm_el1_sysregs_context_save(NON_SECURE);
+
 		/*
 		 * We are done stashing the non-secure context. Ask the
 		 * OPTEE to do the work now.

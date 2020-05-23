@@ -70,4 +70,7 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
+#define WRITE_ONCE(var, val) \
+	(*((volatile typeof(val) *)(&(var))) = (val))
+#define idsb(opt)	asm volatile("dsb " #opt : : : "memory")
 #endif

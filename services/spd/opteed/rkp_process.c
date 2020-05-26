@@ -1,5 +1,6 @@
 #include <lib/xlat_tables/xlat_tables_v2.h>
 #include <drivers/arm/tzc400.h>
+#include <string.h>
 #include "rkp_process.h"
 
 uintptr_t rkp_process(uint32_t smc_fid,
@@ -30,6 +31,12 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_RKP_INSTR_SIMULATION:
             result = rkp_instruction_simulation(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_RKP_CLEAR_PAGE:
+            result = rkp_clear_page(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_RKP_COPY_PAGE:
+            result = rkp_copy_page(x1,x2,x3,x4,handle);
             break;            
         default:
             result = NULL_PTR;
@@ -236,4 +243,18 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             break;        
     }
     SMC_RET1(handle,result);
+}
+
+uintptr_t rkp_clear_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    void * targetPage_pa_va = (void *)x1;
+    memset(targetPage_pa_va, 0, PAGE_SIZE);
+    SMC_RET1(handle,0);
+}
+
+uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    char * to = (char*)x1;
+    char* from = (char*)x2;
+    unsigned long n = x3;
+    memcpy(to,from,n);
+    SMC_RET2(handle,0,n);
 }

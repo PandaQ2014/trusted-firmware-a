@@ -39,6 +39,12 @@
 #define TEESMC_OPTEED_FUNCID_RKP_INSTR_SIMULATION 24
 #define TEESMC_OPTEED_RKP_INSTR_SIMULATION \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_INSTR_SIMULATION)
+#define TEESMC_OPTEED_FUNCID_RKP_CLEAR_PAGE 25
+#define TEESMC_OPTEED_RKP_CLEAR_PAGE \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_CLEAR_PAGE)
+#define TEESMC_OPTEED_FUNCID_RKP_COPY_PAG 26
+#define TEESMC_OPTEED_RKP_COPY_PAGE \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_COPY_PAG)
 uintptr_t rkp_process(uint32_t smc_fid,
         u_register_t x1,
         u_register_t x2,
@@ -73,4 +79,10 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
 #define WRITE_ONCE(var, val) \
 	(*((volatile typeof(val) *)(&(var))) = (val))
 #define idsb(opt)	asm volatile("dsb " #opt : : : "memory")
+
+
+uintptr_t rkp_clear_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
 #endif

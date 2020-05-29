@@ -45,6 +45,9 @@
 #define TEESMC_OPTEED_FUNCID_RKP_COPY_PAG 26
 #define TEESMC_OPTEED_RKP_COPY_PAGE \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_COPY_PAG)
+#define TEESMC_OPTEED_FUNCID_RKP_MEM_SET 27
+#define TEESMC_OPTEED_RKP_MEM_SET \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_MEM_SET)
 uintptr_t rkp_process(uint32_t smc_fid,
         u_register_t x1,
         u_register_t x2,
@@ -74,6 +77,10 @@ uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,
 uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+#define RKP_INS_SIM_STR_IMM_64 0
+#define RKP_INS_SIM_STR_IMM_32 1
+
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 #define WRITE_ONCE(var, val) \
@@ -84,5 +91,8 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
 uintptr_t rkp_clear_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
 
 #endif

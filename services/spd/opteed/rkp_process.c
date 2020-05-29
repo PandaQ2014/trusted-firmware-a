@@ -37,6 +37,9 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_RKP_COPY_PAGE:
             result = rkp_copy_page(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_RKP_MEM_SET:
+            result = rkp_mem_set(x1,x2,x3,x4,handle);
             break;            
         default:
             result = NULL_PTR;
@@ -104,8 +107,8 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
             SET_NEXT_INDEX(PTMAP[i], i+1);
         }
     }
-    tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+    // tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
+    //             (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
@@ -257,4 +260,9 @@ uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
     unsigned long n = x3;
     memcpy(to,from,n);
     SMC_RET2(handle,0,n);
+}
+uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    void * result;
+    result = memset((void*)x1,x2,x3);
+    SMC_RET2(handle,0,(unsigned long)result);
 }

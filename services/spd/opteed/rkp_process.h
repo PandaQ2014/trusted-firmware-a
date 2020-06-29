@@ -48,6 +48,10 @@
 #define TEESMC_OPTEED_FUNCID_RKP_MEM_SET 27
 #define TEESMC_OPTEED_RKP_MEM_SET \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_MEM_SET)
+#define TEESMC_OPTEED_FUNCID_RKP_CFU_PATCH 28
+#define TEESMC_OPTEED_RKP_CFU_PATCH \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_CFU_PATCH)
+
 uintptr_t rkp_process(uint32_t smc_fid,
         u_register_t x1,
         u_register_t x2,
@@ -94,5 +98,6 @@ uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
 
 uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
+uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 #endif

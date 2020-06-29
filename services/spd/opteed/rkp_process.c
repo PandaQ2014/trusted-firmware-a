@@ -40,7 +40,9 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_RKP_MEM_SET:
             result = rkp_mem_set(x1,x2,x3,x4,handle);
-            break;            
+            break;
+        case TEESMC_OPTEED_RKP_CFU_PATCH:
+            result = rkp_cfu_patch(x1,x2,x3,x4,handle);       
         default:
             result = NULL_PTR;
             break;
@@ -107,8 +109,8 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
             SET_NEXT_INDEX(PTMAP[i], i+1);
         }
     }
-    // tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-    //             (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+    tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
@@ -265,4 +267,22 @@ uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register
     void * result;
     result = memset((void*)x1,x2,x3);
     SMC_RET2(handle,0,(unsigned long)result);
+}
+static int do_cfu_patch_counts = 0;
+uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    if(x1 == 1){
+        if(do_cfu_patch_counts == 0){
+            tzc_configure_region((uint32_t)0x0,(uint8_t)3U,(unsigned long long )PTPOOL,
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+        }
+        do_cfu_patch_counts++;
+    }else{
+        do_cfu_patch_counts--;
+        if(do_cfu_patch_counts == 0){
+            tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+        }
+    }
+
+    SMC_RET0(handle);
 }

@@ -175,6 +175,7 @@ void tzc400_configure_region(unsigned int filters,
 			  unsigned int nsaid_permissions)
 {
 	if(tzc400.base == 0U){
+		ERROR("not init tzc\n");
 		tzc400_init(PLAT_ARM_TZC_BASE);
 		//tzc400_set_action(TZC_ACTION_ERR_INT);
 		tzc400_set_action(TZC_ACTION_NONE);

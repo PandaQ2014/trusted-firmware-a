@@ -49,6 +49,7 @@ void arm_tzc400_setup(const arm_tzc_regions_info_t *tzc_regions)
 	///* Region 0 set to no access by default */
 	//tzc400_configure_region0(TZC_REGION_S_NONE, 0);
 	//changed by pxs/* Region 0 set to access by default */
+	// ERROR("arm_tzc400_setup\n");
 	tzc400_configure_region0(TZC_REGION_S_RDWR, PLAT_ARM_TZC_NS_DEV_ACCESS);
 	/* Rest Regions set according to tzc_regions array */
 	for (; p->base != 0ULL; p++) {

@@ -271,17 +271,22 @@ uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register
 static int do_cfu_patch_counts = 0;
 uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     if(x1 == 1){
+        // NOTICE("rkp_cfu_patch | before close tzc, counts: %d\n", do_cfu_patch_counts);
         if(do_cfu_patch_counts == 0){
             tzc_configure_region((uint32_t)0x0,(uint8_t)3U,(unsigned long long )PTPOOL,
                 (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
         }
         do_cfu_patch_counts++;
+        // NOTICE("rkp_cfu_patch | after close tzc, counts: %d\n", do_cfu_patch_counts);
     }else{
+        // NOTICE("rkp_cfu_patch | before open tzc, counts: %d\n", do_cfu_patch_counts);
         do_cfu_patch_counts--;
         if(do_cfu_patch_counts == 0){
+            // ERROR("rkp_cfu_patch | open tzc, counts: %d\n", do_cfu_patch_counts);
             tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
                 (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
         }
+        // NOTICE("rkp_cfu_patch | after open tzc, counts: %d\n", do_cfu_patch_counts);
     }
 
     SMC_RET0(handle);

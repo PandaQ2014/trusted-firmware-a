@@ -110,7 +110,7 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
         }
     }
     tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x8303);
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;

@@ -114,7 +114,7 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
-    ERROR("PTM Initialized start 0x%016llx 0x%016llx\n",(unsigned long long )PTPOOL, (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE);
+    ERROR("PTM Initialized start: 0x%016llx end: 0x%016llx\n",(unsigned long long )PTPOOL, (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1);
     finished:
     SMC_RET1(handle,result);
 }
@@ -274,7 +274,7 @@ uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
         // NOTICE("rkp_cfu_patch | before close tzc, counts: %d\n", do_cfu_patch_counts);
         if(do_cfu_patch_counts == 0){
             tzc_configure_region((uint32_t)0x0,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x8303);
         }
         do_cfu_patch_counts++;
         // NOTICE("rkp_cfu_patch | after close tzc, counts: %d\n", do_cfu_patch_counts);
@@ -284,7 +284,7 @@ uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
         if(do_cfu_patch_counts == 0){
             // ERROR("rkp_cfu_patch | open tzc, counts: %d\n", do_cfu_patch_counts);
             tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x8303);
         }
         // NOTICE("rkp_cfu_patch | after open tzc, counts: %d\n", do_cfu_patch_counts);
     }

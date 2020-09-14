@@ -194,7 +194,15 @@ void tzc400_configure_region(unsigned int filters,
 		(region_base < region_top));
 
 	/* region_base and (region_top + 1) must be 4KB aligned */
-	assert(((region_base | (region_top + 1U)) & (4096U - 1U)) == 0U);
+	NOTICE("region_base: 0x%016llx, region_top: 0x%016llx\n", region_base, region_top);
+	if (((region_base | (region_top + 1U)) & (4096U - 1U)) == 0U)
+	{
+		NOTICE("4KB aligned satisfied\n");
+	} else {
+		NOTICE("4KB aligned not satisfiled\n");
+	}
+	
+	assert(((region_base | (region_top + 1U)) & (4096U - 1U)) == 0U);  //not work!
 
 	assert(sec_attr <= TZC_REGION_S_RDWR);
 

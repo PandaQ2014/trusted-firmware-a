@@ -33,7 +33,10 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_PKM_THREAD:   
             result =pkm_thread(handle);
-            break;            
+            break;
+        case TEESMC_OPTEED_STOP_SYSTEM:
+            result =stop_system(handle);  
+            break;     
         default:
             result = NULL_PTR;
             break;
@@ -242,7 +245,18 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
 }
 
 #include<context.h>
-uint64_t ttbr1_value=0xffffffffffffffff;
+#include <arch_helpers.h>
+#include <bl31/bl31.h>
+#include <common/bl_common.h>
+#include <common/debug.h>
+#include <common/runtime_svc.h>
+#include <lib/el3_runtime/context_mgmt.h>
+#include <plat/common/platform.h>
+#include <tools_share/uuid.h>
+
+uint64_t ttbr1_value=0xffffffffffffffff; //全局变量，为了存储首次出现的ttbr1的值
+
+#include<context.h>
 uintptr_t pkm_thread(void *handle){
     cpu_context_t *ctx;//cpu上下文，为了去取出ttbr1_el1寄存器的值。
     ctx=cm_get_context(NON_SECURE);//取出非安全态（即NW）的cpu状态
@@ -257,15 +271,25 @@ uintptr_t pkm_thread(void *handle){
     printf("TTBR1寄存器的内容0x%016llx\n",ttbr1);
     /*   判断全局变量是否还未被赋值，若未赋值，则将第一次的ttbr1寄存器值赋予它*/
     if(ttbr1_value==0xffffffffffffffff){
-    ttbr1_value=ttbr1;
-}
+        ttbr1_value=ttbr1;
+    }
     printf("TTBR1_value内容0x%016llx\n",ttbr1_value);
-    ttbr1_result=ttbr1&ttbr1_value;
-    if(ttbr1_result!=0x0000000000000000){
-    printf("安全\n");
-}
+    ttbr1_result=ttbr1^ttbr1_value;
+    if(ttbr1_result==0x0000000000000000){
+        printf("安全\n");
+    }
     else{
-    printf("不安全0x%016llx\n",ttbr1_result);
-}
+        printf("不安全0x%016llx\n",ttbr1_result);
+        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        printf("检测到ttbr1_el1寄存器被修改，将强制封锁系统的内存读写权限");
+    }   
     SMC_RET1(handle,result);
+}
+
+
+uintptr_t stop_system(void *handle){
+    int result=1; //返回结果，无用
+     printf("888888888888888888888888888888888888888888888888");
+    tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xffffffffffffffff,TZC_REGION_S_NONE,0);//16个f和8个f都能卡死系统？？？？？？？？？
+     SMC_RET1(handle,result);
 }

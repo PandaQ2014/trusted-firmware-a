@@ -203,10 +203,10 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 	optee_context_t *optee_ctx = &opteed_sp_context[linear_id];
 	uint64_t rc;
 	uintptr_t result = NULL_PTR;
+    
 	/*
 	 * Determine which security state this SMC originated from
 	 */
-
 	if (is_caller_non_secure(flags)) {
 		/*
 		 * This is a fresh request from the non-secure client.
@@ -216,7 +216,7 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 		 */
 		assert(handle == cm_get_context(NON_SECURE));
 
-
+        cm_el1_sysregs_context_save(NON_SECURE);
 		
 		result =rkp_process(smc_fid,x1,x2,x3,x4,cookie,handle,flags);
 		
@@ -227,7 +227,7 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 			return result;
 		}
 
-		cm_el1_sysregs_context_save(NON_SECURE);
+		
 
 		/*
 		 * We are done stashing the non-secure context. Ask the
@@ -248,9 +248,13 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 		 * flags as appropriate.
 		 */
 		if (GET_SMC_TYPE(smc_fid) == SMC_TYPE_FAST) {
+            if (smc_fid==TEESMC_OPTEED_PKM_THREAD)
+                printf("TTBR1寄存器原本的内容0x%016x\n",smc_fid);
 			cm_set_elr_el3(SECURE, (uint64_t)
 					&optee_vector_table->fast_smc_entry);
 		} else {
+            if (smc_fid==TEESMC_OPTEED_PKM_THREAD)
+                printf("stdTTBR1寄存器原本的内容0x%016x\n",smc_fid);
 			cm_set_elr_el3(SECURE, (uint64_t)
 					&optee_vector_table->yield_smc_entry);
 		}
@@ -275,7 +279,6 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 			      CTX_GPREG_X7,
 			      read_ctx_reg(get_gpregs_ctx(handle),
 					   CTX_GPREG_X7));
-
 		SMC_RET4(&optee_ctx->cpu_ctx, smc_fid, x1, x2, x3);
 	}
 

@@ -30,6 +30,9 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_RKP_INSTR_SIMULATION:
             result = rkp_instruction_simulation(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_PKM_THREAD:   
+            result =pkm_thread(handle);
             break;            
         default:
             result = NULL_PTR;
@@ -235,5 +238,34 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             result = -1;
             break;        
     }
+    SMC_RET1(handle,result);
+}
+
+#include<context.h>
+uint64_t ttbr1_value=0xffffffffffffffff;
+uintptr_t pkm_thread(void *handle){
+    cpu_context_t *ctx;//cpu上下文，为了去取出ttbr1_el1寄存器的值。
+    ctx=cm_get_context(NON_SECURE);//取出非安全态（即NW）的cpu状态
+    assert(ctx != NULL);
+    el1_sys_regs_t *state;//el1系统寄存器状态
+    state=get_sysregs_ctx(ctx);
+    int result=1; //返回结果，无用
+    uint64_t ttbr1= read_ctx_reg(state, CTX_TTBR1_EL1);//从NW中取出的ttbr1_el1的值
+    uint64_t ttbr1_result=0x0000000000000000;//对比结果，即每次异或后的结果
+    printf("TTBR1寄存器原本的内容0x%016llx\n",ttbr1);
+    ttbr1 &= 0x0000ffffffffffff;//与操作，为了将前四位asid全部置换为0
+    printf("TTBR1寄存器的内容0x%016llx\n",ttbr1);
+    /*   判断全局变量是否还未被赋值，若未赋值，则将第一次的ttbr1寄存器值赋予它*/
+    if(ttbr1_value==0xffffffffffffffff){
+    ttbr1_value=ttbr1;
+}
+    printf("TTBR1_value内容0x%016llx\n",ttbr1_value);
+    ttbr1_result=ttbr1&ttbr1_value;
+    if(ttbr1_result!=0x0000000000000000){
+    printf("安全\n");
+}
+    else{
+    printf("不安全0x%016llx\n",ttbr1_result);
+}
     SMC_RET1(handle,result);
 }

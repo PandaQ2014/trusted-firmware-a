@@ -39,6 +39,20 @@
 #define TEESMC_OPTEED_FUNCID_RKP_INSTR_SIMULATION 24
 #define TEESMC_OPTEED_RKP_INSTR_SIMULATION \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_INSTR_SIMULATION)
+
+#define TEESMC_OPTEED_FUNCID_RKP_SET_ROADDR 40
+#define TEESMC_OPTEED_RKP_SET_ROADDR \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_SET_ROADDR)
+#define TEESMC_OPTEED_FUNCID_PKM_PROTECT_KEY_CODE 51
+#define TEESMC_OPTEED_PKM_PROTECT_KEY_CODE \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_PROTECT_KEY_CODE)
+#define TEESMC_OPTEED_FUNCID_PKM_SELINUX 52
+#define TEESMC_OPTEED_PKM_SELINUX \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_SELINUX)
+
+
+
+
 #define TEESMC_OPTEED_FUNCID_STOP_SYSTEM 49
 #define TEESMC_OPTEED_STOP_SYSTEM \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_STOP_SYSTEM)
@@ -78,6 +92,11 @@ uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_re
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 uintptr_t stop_system();
 uintptr_t pkm_thread();
+
+#define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)
+uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 #define WRITE_ONCE(var, val) \
 	(*((volatile typeof(val) *)(&(var))) = (val))
 #define idsb(opt)	asm volatile("dsb " #opt : : : "memory")

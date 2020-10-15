@@ -36,7 +36,16 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_STOP_SYSTEM:
             result =stop_system(handle);  
-            break;     
+            break;
+        case TEESMC_OPTEED_RKP_SET_ROADDR:
+            result = rkp_set_roaddr(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_PKM_PROTECT_KEY_CODE:
+            result = pkm_protect_key_code(x1,x2,x3,x4,handle);
+            break;      
+        case TEESMC_OPTEED_PKM_SELINUX:
+            result = pkm_selinux(x1,x2,x3,x4,handle);
+            break;
         default:
             result = NULL_PTR;
             break;
@@ -292,4 +301,88 @@ uintptr_t stop_system(void *handle){
      printf("888888888888888888888888888888888888888888888888");
     tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xffffffffffffffff,TZC_REGION_S_NONE,0);//16个f和8个f都能卡死系统？？？？？？？？？
      SMC_RET1(handle,result);
+}
+
+
+
+static unsigned long long ro_start;
+static unsigned long long ro_end;
+
+
+
+
+uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    ro_start = (unsigned long long)x1;
+    ro_end = (unsigned long long)x2;
+    ERROR("text_start£º%016llx, end:%016llx\n",ro_start,ro_end);
+    SMC_RET1(handle,0);
+}
+
+
+
+static char check = 0xff;
+uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    // if(ro_start == NULL)
+    // {
+    //     ro_start = (char *)x1;
+    //     ro_end = (char *)x1 + x2;
+    //     ERROR("rodata start:%016llx,end:%016llx\n",(unsigned long long int)ro_start,(unsigned long long int)ro_end);
+    //     SMC_RET1(handle,0);
+    // }
+    // char *start = (char *)x1;
+    // char *end = (char *)x1 + x2;
+    // ERROR("%d",SEPARATE_CODE_AND_RODATA);
+    // ERROR("%016llx",(unsigned long long)__RODATA_START__);
+    //ERROR("rodata start:%016llx,end:%016llx\n",(unsigned long long int)start,(unsigned long long int)end);
+    char *start = (char *)ro_start;
+    char *end = (char *)ro_end;
+    char new_check = *start;
+    start++;
+    while(start != end)
+	{
+		new_check ^= *start;
+		start++;
+	}
+    ERROR("new_check:0x%02x\n",new_check);
+	//ERROR("check:0x%02x\n",check);
+	if(check == 0xff)
+	{
+		check = new_check;
+		ERROR("change check:0x%02x\n",check);
+	}
+	else if (check == new_check)
+	{
+		ERROR("rodata safe!\n");
+	}
+	else 
+	{
+		ERROR("rodata error!\n");
+        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+	}
+    SMC_RET1(handle,0);
+}
+
+static unsigned long long int *enabled_addr = NULL;
+static bool *enforcing_addr = NULL;
+
+uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    if(enabled_addr == NULL)
+    {
+        enabled_addr = (unsigned long long *)x1;
+        enforcing_addr = (bool *)x2;
+        ERROR("selinux_enabled:%lld, addr:%016llx\n",*enabled_addr,(unsigned long long int)enabled_addr);
+        // ERROR("selinux_enforcing: addr:%016llx\n",(unsigned long long int)enforcing_addr);
+        ERROR("selinux_enforcing:%x, addr:%016llx\n",*enforcing_addr,(unsigned long long int)enforcing_addr);
+        SMC_RET1(handle,0);
+    }
+    if(*enabled_addr == 1 && *enforcing_addr == 1)
+    {
+        ERROR("selinux safa!\n");
+    }
+    else 
+    {
+        ERROR("selinux unsafe!\n");
+        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+    }
+    SMC_RET1(handle,0);
 }

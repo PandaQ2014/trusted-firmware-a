@@ -52,10 +52,6 @@
 
 
 
-
-#define TEESMC_OPTEED_FUNCID_STOP_SYSTEM 49
-#define TEESMC_OPTEED_STOP_SYSTEM \
-	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_STOP_SYSTEM)
 #define TEESMC_OPTEED_FUNCID_PKM_THREAD 50
 #define TEESMC_OPTEED_PKM_THREAD \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_THREAD)
@@ -90,7 +86,6 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
 
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-uintptr_t stop_system();
 uintptr_t pkm_thread();
 
 #define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)

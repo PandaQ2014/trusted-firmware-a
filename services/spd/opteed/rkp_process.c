@@ -34,9 +34,6 @@ uintptr_t rkp_process(uint32_t smc_fid,
         case TEESMC_OPTEED_PKM_THREAD:   
             result =pkm_thread(handle);
             break;
-        case TEESMC_OPTEED_STOP_SYSTEM:
-            result =stop_system(handle);  
-            break;
         case TEESMC_OPTEED_RKP_SET_ROADDR:
             result = rkp_set_roaddr(x1,x2,x3,x4,handle);
             break;
@@ -272,7 +269,7 @@ uintptr_t pkm_thread(void *handle){
     assert(ctx != NULL);
     el1_sys_regs_t *state;//el1系统寄存器状态
     state=get_sysregs_ctx(ctx);
-    int result=1; //返回结果，无用
+    int result=1; //返回结果，make nw panic
     uint64_t ttbr1= read_ctx_reg(state, CTX_TTBR1_EL1);//从NW中取出的ttbr1_el1的值
     uint64_t ttbr1_result=0x0000000000000000;//对比结果，即每次异或后的结果
     printf("TTBR1寄存器原本的内容0x%016llx\n",ttbr1);
@@ -289,18 +286,11 @@ uintptr_t pkm_thread(void *handle){
     }
     else{
         printf("不安全0x%016llx\n",ttbr1_result);
-        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        result=0;
         printf("检测到ttbr1_el1寄存器被修改，将强制封锁系统的内存读写权限");
     }   
     SMC_RET1(handle,result);
-}
-
-
-uintptr_t stop_system(void *handle){
-    int result=1; //返回结果，无用
-     printf("888888888888888888888888888888888888888888888888");
-    tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xffffffffffffffff,TZC_REGION_S_NONE,0);//16个f和8个f都能卡死系统？？？？？？？？？
-     SMC_RET1(handle,result);
 }
 
 
@@ -315,7 +305,7 @@ uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_regis
     ro_start = (unsigned long long)x1;
     ro_end = (unsigned long long)x2;
     ERROR("text_start£º%016llx, end:%016llx\n",ro_start,ro_end);
-    SMC_RET1(handle,0);
+    SMC_RET1(handle,1);
 }
 
 
@@ -334,6 +324,7 @@ uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u
     // ERROR("%d",SEPARATE_CODE_AND_RODATA);
     // ERROR("%016llx",(unsigned long long)__RODATA_START__);
     //ERROR("rodata start:%016llx,end:%016llx\n",(unsigned long long int)start,(unsigned long long int)end);
+    int result=1;    
     char *start = (char *)ro_start;
     char *end = (char *)ro_end;
     char new_check = *start;
@@ -357,15 +348,17 @@ uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u
 	else 
 	{
 		ERROR("rodata error!\n");
-        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        result=0;
 	}
-    SMC_RET1(handle,0);
+    SMC_RET1(handle,result);
 }
 
 static unsigned long long int *enabled_addr = NULL;
 static bool *enforcing_addr = NULL;
 
 uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    int result=1;    
     if(enabled_addr == NULL)
     {
         enabled_addr = (unsigned long long *)x1;
@@ -382,7 +375,8 @@ uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register
     else 
     {
         ERROR("selinux unsafe!\n");
-        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        result=0;
+        //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
     }
-    SMC_RET1(handle,0);
+    SMC_RET1(handle,result);
 }

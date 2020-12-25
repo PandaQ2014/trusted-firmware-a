@@ -1,4 +1,14 @@
 /*
+ *项目名：pkm
+ *作者：北京邮电大学
+ *时间：2020年12月25日
+ *修改内容：
+ *  第43行：引入rkp_process.h头文件
+ *  第231行-第239行：在opteed_smc_handler函数中拦截smc指令到rkp_process.c中
+*/
+
+
+/*
  * Copyright (c) 2013-2017, ARM Limited and Contributors. All rights reserved.
  *
  * SPDX-License-Identifier: BSD-3-Clause
@@ -248,13 +258,9 @@ static uintptr_t opteed_smc_handler(uint32_t smc_fid,
 		 * flags as appropriate.
 		 */
 		if (GET_SMC_TYPE(smc_fid) == SMC_TYPE_FAST) {
-            if (smc_fid==TEESMC_OPTEED_PKM_THREAD)
-                printf("TTBR1寄存器原本的内容0x%016x\n",smc_fid);
 			cm_set_elr_el3(SECURE, (uint64_t)
 					&optee_vector_table->fast_smc_entry);
 		} else {
-            if (smc_fid==TEESMC_OPTEED_PKM_THREAD)
-                printf("stdTTBR1寄存器原本的内容0x%016x\n",smc_fid);
 			cm_set_elr_el3(SECURE, (uint64_t)
 					&optee_vector_table->yield_smc_entry);
 		}

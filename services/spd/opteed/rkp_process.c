@@ -1,3 +1,14 @@
+/*
+ *项目名：pkm
+ *作者：北京邮电大学
+ *时间：2020年12月24日
+ *修改内容：
+ *  这个文件是将smc指令拦截后，对传来的smc指令进行操作
+ *  第280行-第285行：定义rkp_set_roaddr函数，对静态变量ro_start和ro_end进行初始化
+ *  第286行-第319行：定义pkm_protect_key_code函数，进行内核代码的检查和保护
+ *  第324行-第347行：定义pkm_selinux函数，对selinux的状态进行检查和保护
+*/
+
 #include <lib/xlat_tables/xlat_tables_v2.h>
 #include <drivers/arm/tzc400.h>
 #include "rkp_process.h"
@@ -30,9 +41,6 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_RKP_INSTR_SIMULATION:
             result = rkp_instruction_simulation(x1,x2,x3,x4,handle);
-            break;
-        case TEESMC_OPTEED_PKM_THREAD:   
-            result =pkm_thread(handle);
             break;
         case TEESMC_OPTEED_RKP_SET_ROADDR:
             result = rkp_set_roaddr(x1,x2,x3,x4,handle);
@@ -259,44 +267,12 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
 #include <lib/el3_runtime/context_mgmt.h>
 #include <plat/common/platform.h>
 #include <tools_share/uuid.h>
-
-uint64_t ttbr1_value=0xffffffffffffffff; //全局变量，为了存储首次出现的ttbr1的值
-
-#include<context.h>
-uintptr_t pkm_thread(void *handle){
-    cpu_context_t *ctx;//cpu上下文，为了去取出ttbr1_el1寄存器的值。
-    ctx=cm_get_context(NON_SECURE);//取出非安全态（即NW）的cpu状态
-    assert(ctx != NULL);
-    el1_sys_regs_t *state;//el1系统寄存器状态
-    state=get_sysregs_ctx(ctx);
-    int result=1; //返回结果，make nw panic
-    uint64_t ttbr1= read_ctx_reg(state, CTX_TTBR1_EL1);//从NW中取出的ttbr1_el1的值
-    uint64_t ttbr1_result=0x0000000000000000;//对比结果，即每次异或后的结果
-    printf("TTBR1寄存器原本的内容0x%016llx\n",ttbr1);
-    ttbr1 &= 0x0000ffffffffffff;//与操作，为了将前四位asid全部置换为0
-    printf("TTBR1寄存器的内容0x%016llx\n",ttbr1);
-    /*   判断全局变量是否还未被赋值，若未赋值，则将第一次的ttbr1寄存器值赋予它*/
-    if(ttbr1_value==0xffffffffffffffff){
-        ttbr1_value=ttbr1;
-    }
-    printf("TTBR1_value内容0x%016llx\n",ttbr1_value);
-    ttbr1_result=ttbr1^ttbr1_value;
-    if(ttbr1_result==0x0000000000000000){
-        printf("安全\n");
-    }
-    else{
-        printf("不安全0x%016llx\n",ttbr1_result);
-        //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
-        result=0;
-        printf("检测到ttbr1_el1寄存器被修改，将强制封锁系统的内存读写权限");
-    }   
-    SMC_RET1(handle,result);
-}
+#include<drivers/delay_timer.h>
 
 
 
-static unsigned long long ro_start;
-static unsigned long long ro_end;
+static unsigned long long ro_start;//用来存储所保护的内核地址区间的首地址
+static unsigned long long ro_end;//用来存储所保护的内核地址区间的尾地址
 
 
 
@@ -308,30 +284,17 @@ uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_regis
     SMC_RET1(handle,1);
 }
 
-
-
-static char check = 0xff;
+static char check = 0xff;//初始化check变量，用来表示完整性检查后的结果
 uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
-    // if(ro_start == NULL)
-    // {
-    //     ro_start = (char *)x1;
-    //     ro_end = (char *)x1 + x2;
-    //     ERROR("rodata start:%016llx,end:%016llx\n",(unsigned long long int)ro_start,(unsigned long long int)ro_end);
-    //     SMC_RET1(handle,0);
-    // }
-    // char *start = (char *)x1;
-    // char *end = (char *)x1 + x2;
-    // ERROR("%d",SEPARATE_CODE_AND_RODATA);
-    // ERROR("%016llx",(unsigned long long)__RODATA_START__);
+    int result=1;//返回至nw的结果，如果是1表示通过完整性检查，如果是0表示没有通过完整性检查   
+    char *start = (char *)(ro_start);
+    char *end =   (char *)(ro_end);
     //ERROR("rodata start:%016llx,end:%016llx\n",(unsigned long long int)start,(unsigned long long int)end);
-    int result=1;    
-    char *start = (char *)ro_start;
-    char *end = (char *)ro_end;
     char new_check = *start;
     start++;
     while(start != end)
 	{
-		new_check ^= *start;
+		new_check ^= *start;//进行异或操作
 		start++;
 	}
     ERROR("new_check:0x%02x\n",new_check);
@@ -349,7 +312,8 @@ uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u
 	{
 		ERROR("rodata error!\n");
         //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
-        result=0;
+        result=0;//完整性检查出错，将返回至nw的result值设置为0
+        printf("there is an error....................");
 	}
     SMC_RET1(handle,result);
 }
@@ -376,6 +340,7 @@ uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register
     {
         ERROR("selinux unsafe!\n");
         result=0;
+        printf("there is an error....................");
         //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
     }
     SMC_RET1(handle,result);

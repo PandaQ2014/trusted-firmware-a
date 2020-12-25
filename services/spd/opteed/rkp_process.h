@@ -1,3 +1,13 @@
+/*
+ *项目名：pkm
+ *作者：北京邮电大学
+ *时间：2020年12月24日
+ *修改内容：
+ *  引入头文件和必须的宏定义
+ *  第33行-第61行：定义smc指令的fid
+ *  第90行-第100行：rkp_process.c中用到的函数的声明
+*/
+
 #ifndef RKP_PROCESS_H
 #define RKP_PROCESS_H
 
@@ -52,9 +62,6 @@
 
 
 
-#define TEESMC_OPTEED_FUNCID_PKM_THREAD 50
-#define TEESMC_OPTEED_PKM_THREAD \
-	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_THREAD)
 
 uintptr_t rkp_process(uint32_t smc_fid,
         u_register_t x1,
@@ -86,7 +93,6 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
 
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-uintptr_t pkm_thread();
 
 #define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)
 uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);

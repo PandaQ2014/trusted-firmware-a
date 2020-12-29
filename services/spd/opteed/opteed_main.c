@@ -4,7 +4,7 @@
  *时间：2020年12月25日
  *修改内容：
  *  第43行：引入rkp_process.h头文件
- *  第231行-第239行：在opteed_smc_handler函数中拦截smc指令到rkp_process.c中
+ *  第231行-第239行：在opteed_smc_handler函数中将smc指令拦截到rkp_process.c中，拦截后的指令会在rkp_process.c文件进行处理；此处修改属于只读代码段保护功能和selinux保护功能
 */
 
 

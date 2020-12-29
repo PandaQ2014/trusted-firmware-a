@@ -3,10 +3,10 @@
  *作者：北京邮电大学
  *时间：2020年12月24日
  *修改内容：
- *  这个文件是将smc指令拦截后，对传来的smc指令进行操作
- *  第280行-第285行：定义rkp_set_roaddr函数，对静态变量ro_start和ro_end进行初始化
- *  第286行-第319行：定义pkm_protect_key_code函数，进行内核代码的检查和保护
- *  第324行-第347行：定义pkm_selinux函数，对selinux的状态进行检查和保护
+ *  此文件的作用是对拦截到这里的smc指令进行处理
+ *  第280行-第285行：定义rkp_set_roaddr函数，对静态变量ro_start和ro_end进行初始化；此处修改属于只读代码段保护功能
+ *  第286行-第319行：定义pkm_protect_key_code函数，进行内核代码的检查和保护；此处修改属于只读代码段保护功能
+ *  第324行-第347行：定义pkm_selinux函数，对selinux的状态进行检查和保护；此处修改属于selinux保护功能
 */
 
 #include <lib/xlat_tables/xlat_tables_v2.h>

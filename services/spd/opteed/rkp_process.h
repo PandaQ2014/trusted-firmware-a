@@ -85,6 +85,52 @@ uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_re
 #define RKP_INS_SIM_STR_IMM_64 0
 #define RKP_INS_SIM_STR_IMM_32 1
 
+#define SIMULATE_STP_XA_XA \
+	unsigned long nw_xa = x2; \
+            int nw_xa_low = nw_xa; \
+            int nw_xa_high = nw_xa >> 32; \
+            for (j = 0; j < 2; j++) { \
+                for (i = 0; i < 4; i++) { \
+                    memset(pa, nw_xa_low, 1); \
+                    nw_xa_low = nw_xa_low >> 8; \
+                    pa += 1; \
+                } \
+                for (i = 0; i < 4; i++) { \
+                    memset(pa, nw_xa_high, 1); \
+                    nw_xa_high = nw_xa_high >> 8; \
+                    pa += 1; \
+                } \
+            }
+
+#define SIMULATE_STP_XA_XB \
+	unsigned long nw_xa = x2; \
+	unsigned long nw_xb = x3; \
+    int nw_xa_l = nw_xa; \
+    int nw_xa_h = nw_xa >> 32; \
+    int nw_xb_l = nw_xb; \
+    int nw_xb_h = nw_xb >> 32; \
+    for (i = 0; i < 4; i++) { \
+        memset(pa, nw_xa_l, 1); \
+        nw_xa_l = nw_xa_l >> 8; \
+        pa += 1; \
+    } \
+    for (i = 0; i < 4; i++) { \
+        memset(pa, nw_xa_h, 1); \
+        nw_xa_h = nw_xa_h >> 8; \
+        pa += 1; \
+    } \
+    for (i = 0; i < 4; i++) {\
+        memset(pa, nw_xb_l, 1); \
+        nw_xb_l = nw_xb_l >> 8; \
+        pa += 1; \
+    } \
+    for (i = 0; i < 4; i++) { \
+        memset(pa ,nw_xb_h, 1); \
+        nw_xb_h = nw_xb_h >> 8; \
+        pa += 1; \
+    }
+	
+
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 #define WRITE_ONCE(var, val) \

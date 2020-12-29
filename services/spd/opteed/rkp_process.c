@@ -110,11 +110,11 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
         }
     }
     tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x83038303);
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
-    ERROR("PTM Initialized start 0x%016llx 0x%016llx\n",(unsigned long long )PTPOOL, (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE);
+    ERROR("PTM Initialized start: 0x%016llx end: 0x%016llx\n",(unsigned long long )PTPOOL, (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1);
     finished:
     SMC_RET1(handle,result);
 }
@@ -238,9 +238,156 @@ uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_re
 
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
-    unsigned long instruction_mark = x1;
+    unsigned long instruction = x1;
+    unsigned long phys_addr = x4;
+    NOTICE("rkp_instruction_simulation | inst: 0x%08lx, write_phys_addr: 0x%016lx\n", instruction, phys_addr);
     result = 0;
-    switch(instruction_mark){
+    char *pa = (char *)phys_addr;
+    int i, j;
+
+    switch(instruction) {
+        // instruction in __memset()
+        case 0x39000107: {
+            NOTICE("get instr: srtb w7, [x8]\n");
+            int w7 = x2;
+            for (i = 0; i < 1; i++) {
+                memset(pa, w7, 1);
+                w7 = w7 >> 8;
+                pa += 1;
+            }
+            break;
+        }
+        case 0x78002507: {
+            NOTICE("get instr: strh w7, [x8], #2\n");
+            int w7 = x2;
+            for (i = 0; i < 2; i++) {
+                memset(pa, w7, 1);
+                w7 = w7 >> 8;
+                pa += 1;
+            }
+            break;
+        }
+        case 0xb8004507: {
+            NOTICE("get instr: str w7, [x8], #4\n");
+            int w7 = x2;
+            for (i = 0; i < 4; i++) {
+                memset(pa, w7, 1);
+                w7 = w7 >> 8;
+                pa += 1;
+            }
+            break;
+        }
+        case 0xf8008507: {
+            NOTICE("get instr: str x7, [x8], #8\n");
+            int x7_l = x2;
+            int x7_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x7_l, 1);
+                x7_l = x7_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x7_h, 1);
+                x7_h = x7_h >> 8;
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0xa9001d07: {
+            NOTICE("get instr: stp x7, x7, [x8]\n");
+            SIMULATE_STP_XA_XA
+            break;
+        }
+        case 0xa9011d07: {
+            NOTICE("get instr: stp x7, x7, [x8, #0x10]\n");
+            SIMULATE_STP_XA_XA
+            break;
+        }
+        case 0xa9021d07: {
+            NOTICE("get instr: stp x7, x7, [x8, #0x20]\n");
+            SIMULATE_STP_XA_XA
+            break;
+        }
+        case 0xa9031d07: {
+            NOTICE("get instr: stp x7, x7, [x8, #0x30]\n");
+            SIMULATE_STP_XA_XA
+            break;
+        }
+        case 0xd50b7428: {
+            NOTICE("get instr: dc zva, x8\n");
+            memset(pa, 0, 1024);
+            break;
+        }
+
+        // instruction in __arch_copy_from_user()
+		case 0xf80084c3: {
+            NOTICE("get instr: str x3, [x6], #8\n");
+            int x3_l = x2;
+            int x3_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x3_l, 1);
+                x3_l = x3_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x3_h, 1);
+                x3_h = x3_h >> 8;
+                pa += 1;
+            }
+			break;
+        }
+		case 0xb80044c3: {
+            NOTICE("get instr: str w3, [x6], #4\n");
+            int w3 = x2;
+            for (i = 0; i < 4; i++) {
+                memset(pa, w3, 1);
+                w3 = w3 >> 8;
+                pa += 1;
+            }
+			break;
+        }
+		case 0x780024c3: {
+            NOTICE("get instr: strh w3, [x6], #2\n");
+            int w3 = x2;
+            for (i = 0; i < 2; i++) {
+                memset(pa, w3, 1);
+                w3 = w3 >> 8;
+                pa += 1;
+            }
+			break;
+        }
+		case 0x380014c3: {
+            NOTICE("get instr: strb w3, [x6], #1\n");
+            int w3 = x2;
+            for (i = 0; i < 1; i++) {
+                memset(pa, w3, 1);
+                w3 = w3 >> 8;
+                pa += 1;
+            }
+			break;
+        }
+
+        case 0xa88120c7: {
+            NOTICE("get instr: stp x7, x8, [x6], #0x10\n");
+            SIMULATE_STP_XA_XB
+            break;
+        }
+        case 0xa88128c9: {
+            NOTICE("get instr: stp x9, x10, [x6], #0x10\n");
+            SIMULATE_STP_XA_XB
+            break;
+        }
+        case 0xa88130cb: {
+            NOTICE("get instr: stp x11, x12, [x6], #0x10\n");
+            SIMULATE_STP_XA_XB
+            break;
+        }
+        case 0xa88138cd: {
+            NOTICE("get instr: stp x13, x14, [x6], #0x10\n");
+            SIMULATE_STP_XA_XB
+            break;
+        }
 
         default:
             ERROR("unsolved instruction\n");

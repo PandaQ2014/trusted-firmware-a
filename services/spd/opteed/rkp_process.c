@@ -42,7 +42,11 @@ uintptr_t rkp_process(uint32_t smc_fid,
             result = rkp_mem_set(x1,x2,x3,x4,handle);
             break;
         case TEESMC_OPTEED_RKP_CFU_PATCH:
-            result = rkp_cfu_patch(x1,x2,x3,x4,handle);       
+            result = rkp_cfu_patch(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_RKP_TZC_SET_ACTION:
+            result = rkp_tzc_set_action(x1, x2, x3, x4, handle);
+            break;
         default:
             result = NULL_PTR;
             break;
@@ -110,7 +114,7 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
         }
     }
     tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x83038303);
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x8303);
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
@@ -431,5 +435,16 @@ uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
         }
     }
 
+    SMC_RET0(handle);
+}
+
+uintptr_t rkp_tzc_set_action(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle) {
+    if (x1 == 1) {
+        tzc_set_action(TZC_ACTION_ERR_INT);
+        NOTICE("TZC_ACTION_ERR_INT set!\n");
+    } else {
+        tzc_set_action(TZC_ACTION_NONE);
+        NOTICE("TZC_ACTION_NONE set!\n");
+    }
     SMC_RET0(handle);
 }

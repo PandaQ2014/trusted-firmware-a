@@ -393,6 +393,34 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             break;
         }
 
+        // instruction in __arch_clear_user()
+        case 0xf800841f: {
+            NOTICE("get instr: str xzr, [x0], #8\n");
+            for (i = 0; i < 8; i++) {
+                memset(pa, 0, 1);
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0x7800241f: {
+            NOTICE("get instr: strh wzr, [x0], #2\n");
+            for (i = 0; i < 2; i++) {
+                memset(pa, 0, 1);
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0x3800041f: {
+            NOTICE("get instr: strb wzr, [x0], #0\n");
+            for (i = 0; i < 1; i++) {
+                memset(pa, 0, 1);
+                pa += 1;
+            }
+            break;
+        }
+
         default:
             ERROR("unsolved instruction\n");
             result = -1;

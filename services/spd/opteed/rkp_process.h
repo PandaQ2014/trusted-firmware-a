@@ -132,6 +132,29 @@ uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_re
         nw_xb_h = nw_xb_h >> 8; \
         pa += 1; \
     }
+
+#define SIMULATE_STR_XA \
+    unsigned long nw_xa = x2; \
+    int nw_xa_l = nw_xa; \
+    int nw_xa_h = nw_xa >> 32; \
+    for (i = 0; i < 4; i++) { \
+        memset(pa, nw_xa_l, 1); \
+        nw_xa_l = nw_xa_l >> 8; \
+        pa += 1; \
+    } \
+    for (i = 0; i < 4; i++) { \
+        memset(pa, nw_xa_h, 1); \
+        nw_xa_h = nw_xa_h >> 8; \
+        pa += 1; \
+    }
+
+#define SIMULATE_STR_WA \
+    int nw_wa = x2; \
+    for (i = 0; i < 4; i++) { \
+        memset(pa, nw_wa, 1); \
+        nw_wa = nw_wa >> 8; \
+        pa += 1; \
+    }
 	
 
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);

@@ -114,7 +114,7 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
         }
     }
     tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x8303);
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x83038303);
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
@@ -240,6 +240,10 @@ uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_re
     SMC_RET1(handle,result);
 }
 
+
+/**
+ * 指令模拟时使用memset()一个字节一个字节地写安全内存的原因是TFA里一次写多个字节结果是所有字节全部为第一个字节。
+ */
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
     unsigned long instruction = x1;
@@ -421,8 +425,181 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             break;
         }
 
+        // instruction in el0_da()
+        case 0xf90024a3: {
+            NOTICE("get instr: str x3, [x5, #0x48]\n");
+            int x3_l = x2;
+            int x3_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x3_l, 1);
+                x3_l = x3_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x3_h, 1);
+                x3_h = x3_h >> 8;
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0xf900b840: {
+            NOTICE("get instr: str x0, [x2, #0x170]\n");
+            int x0_l = x2;
+            int x0_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x0_l, 1);
+                x0_l = x0_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x0_h, 1);
+                x0_h = x0_h >> 8;
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0xf900a420: {
+            NOTICE("get instr: str x0, [x1, #0x148]\n");
+            int x0_l = x2;
+            int x0_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x0_l, 1);
+                x0_l = x0_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x0_h, 1);
+                x0_h = x0_h >> 8;
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0xf907f4a6: {
+            NOTICE("get instr: str x6, [x5, #0xfe8]\n");
+            int x6_l = x2;
+            int x6_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x6_l, 1);
+                x6_l = x6_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x6_h, 1);
+                x6_h = x6_h >> 8;
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0xf9009261: {
+            NOTICE("get instr: str x1, [x19, #0x120]\n");
+            int x1_l = x2;
+            int x1_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x1_l, 1);
+                x1_l = x1_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x1_h, 1);
+                x1_h = x1_h >> 8;
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0xf9000462: {
+            NOTICE("get instr: str x2, [x3, #8]\n");
+            int x2_l = x2;
+            int x2_h = x2 >> 32;
+            for (i = 0; i < 4; i++) {
+                memset(pa, x2_l, 1);
+                x2_l = x2_l >> 8;
+                pa += 1;
+            }
+            for (i = 0; i < 4; i++) {
+                memset(pa, x2_h, 1);
+                x2_h = x2_h >> 8;
+                pa += 1;
+            }
+            break;
+        }
+
+        case 0xa9008a74: {
+            NOTICE("get instr: stp x20, x2, [x19, #0x8]\n");
+            SIMULATE_STP_XA_XB
+            break;
+        }
+
+        case 0xf9001673: {
+            NOTICE("get instr: str x19, [x19, #0x28]\n");
+            SIMULATE_STR_XA
+            break;
+        }
+
+        case 0xf9001e7c: {
+            NOTICE("get instr: str x28, [x19, #0x38]\n");
+            SIMULATE_STR_XA
+            break;
+        }
+
+        case 0xf9016a78: {
+            NOTICE("get instr: str x24, [x19, #0x2d0]\n");
+            SIMULATE_STR_XA
+            break;
+        }
+
+        case 0x39000006: {
+            NOTICE("get instr: strb w6, [x0]\n");
+            int w6 = x2;
+            memset(pa, w6, 1);
+            break;
+        }
+
+        case 0x382e6808: {
+            NOTICE("get instr: strb w8, [x0, x14]\n");
+            int w8 = x2;
+            memset(pa, w8, 1);
+            break;
+        }
+
+        case 0x381ff0a7: {
+            NOTICE("get instr: sturb w7, [x5, #-1]\n");
+            int w7 = x2;
+            memset(pa, w7, 1);
+            break;
+        }
+
+        case 0xf9000700: {
+            NOTICE("get instr: str x0, [x24, #8]\n");
+            SIMULATE_STR_XA
+            break;
+        }
+
+        case 0xb9001b02: {
+            NOTICE("get instr: str w2, [x24, #0x18]\n");
+            SIMULATE_STR_WA
+            break;
+        }
+
+        case 0xf9000660: {
+            NOTICE("get instr: str x0, [x19, #0x8]\n");
+            SIMULATE_STR_XA
+            break;
+        }
+
+        case 0x390c7261: {
+            NOTICE("get instr: strb w1, [x19, #0x31c]\n");
+            int w1 = x2;
+            memset(pa, w1, 1);
+            break;
+        }
+
         default:
-            ERROR("unsolved instruction\n");
+            ERROR("unsolved instruction: 0x%08lx\n", instruction);
             result = -1;
             break;        
     }

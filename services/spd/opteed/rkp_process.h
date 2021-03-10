@@ -52,6 +52,18 @@
 #define TEESMC_OPTEED_RKP_CFU_PATCH \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_CFU_PATCH)
 
+#define TEESMC_OPTEED_FUNCID_RKP_SET_ROADDR 40
+#define TEESMC_OPTEED_RKP_SET_ROADDR \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_SET_ROADDR)
+#define TEESMC_OPTEED_FUNCID_RKP_SET_FORBID_FLAG 41
+#define TEESMC_OPTEED_RKP_SET_FORBID_FLAG \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_SET_FORBID_FLAG)
+#define TEESMC_OPTEED_FUNCID_RKP_SET_PXN 42
+#define TEESMC_OPTEED_RKP_SET_PXN \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_SET_PXN)
+
+#define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)
+
 uintptr_t rkp_process(uint32_t smc_fid,
         u_register_t x1,
         u_register_t x2,
@@ -145,5 +157,11 @@ uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
 uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t rkp_set_forbid_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 #endif

@@ -43,6 +43,15 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_RKP_CFU_PATCH:
             result = rkp_cfu_patch(x1,x2,x3,x4,handle);       
+        case TEESMC_OPTEED_RKP_SET_ROADDR:
+            result = rkp_set_roaddr(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_RKP_SET_FORBID_FLAG:
+            result = rkp_set_forbid_flag(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_RKP_SET_PXN:
+            result = rkp_set_pxn(x1,x2,x3,x4,handle);
+            break;
         default:
             result = NULL_PTR;
             break;
@@ -76,6 +85,11 @@ static unsigned int UNUSED;
 static unsigned int USED;
 static int POOLINITED = 0;
 static int ALLOCED_PAGE_NUM = 0;
+
+static unsigned long long ro_start;
+static unsigned long long ro_end;
+static bool forbid_flag = 0;
+
 
 uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     char * pa_start = (char*)x1;
@@ -208,11 +222,37 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
     SMC_RET1(handle,result);
 }
 
+void Forbid_double_mapping(unsigned long content)
+{
+    // char rw = content & PTE_RDONLY;
+    char rw = content & 0x0000000000000080;
+    unsigned long pa_addr = pa_addr(content);
+    // ERROR("content:0x%016llx\n", (unsigned long long)content);
+    
+    if(forbid_flag == 1 && pa_addr>=ro_start && pa_addr<=ro_end-4096 && rw == 0)
+    {
+        ERROR("Illegal mapping!\n");
+        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+    }
+	// if(pa_addr>=ro_start && pa_addr<=ro_end-4096 && pa_map_bit(pa_addr) == 1)
+	// {
+	// 	printf("double mapping!\n");
+    //     // dump_stack();
+	// }
+	// else if(pa_addr>=ro_start && pa_addr<=ro_end-4096)
+	// {
+	// 	pa_map_bit_fill(pa_addr);
+	// 	printf("pa_map_loc:0x%016llx\n",(unsigned long long)pa_map_loc(pa_addr));
+	// }
+	return;
+}
+
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
     //unsigned long pagetable_type = x1;
     unsigned long * target = (unsigned long *)x2;
     unsigned long content = x3;
+    Forbid_double_mapping(content);
     WRITE_ONCE(*target,content);
     idsb(ishst);
     result = 0;
@@ -432,4 +472,36 @@ uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
     }
 
     SMC_RET0(handle);
+}
+uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    ro_start = (unsigned long long)x1;
+    ro_end = (unsigned long long)x2;
+    ERROR("text_start：%016llx, end:%016llx\n",ro_start,ro_end);
+    SMC_RET1(handle,0);
+}
+uintptr_t rkp_set_forbid_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    forbid_flag = 1;
+    SMC_RET1(handle,0);
+}
+
+uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
+    // unsigned long content = (unsigned long)x1;
+    // ERROR("pte:0x%016lx\n",x1);
+    unsigned long long pte_pa = (unsigned long long)x1;
+    ERROR("pte_pa:0x%016llx",pte_pa);
+    unsigned long long *content = (unsigned long long *)pte_pa;
+    // char *content = (char *)pte_pa;
+    ERROR("pte:0x%016llx\n",*content);
+    // ERROR("pte:0x%016llx\n",*content);
+    unsigned long long p = *content & 0x0020000000000000;
+    if (p == 0x0)
+    {
+        ERROR("pxn not set!\n");
+        *content |= 0x0020000000000000;
+        // tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        // *content |= 0x0020000000000000;
+        // x1 |= 0x0020000000000000;
+    }
+    
+    SMC_RET1(handle,0);
 }

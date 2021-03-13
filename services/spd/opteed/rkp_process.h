@@ -61,6 +61,13 @@
 #define TEESMC_OPTEED_FUNCID_RKP_SET_PXN 42
 #define TEESMC_OPTEED_RKP_SET_PXN \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_SET_PXN)
+#define TEESMC_OPTEED_FUNCID_PKM_PROTECT_KEY_CODE 51
+#define TEESMC_OPTEED_PKM_PROTECT_KEY_CODE \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_PROTECT_KEY_CODE)
+#define TEESMC_OPTEED_FUNCID_PKM_SELINUX 52
+#define TEESMC_OPTEED_PKM_SELINUX \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_SELINUX)
+
 
 #define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)
 
@@ -163,5 +170,7 @@ uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_regis
 uintptr_t rkp_set_forbid_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 #endif

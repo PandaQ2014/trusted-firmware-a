@@ -20,10 +20,7 @@
 
 #define NULL_PTR (long unsigned int)0lu
 
-#define TEESMC_OPTEED_FUNCID_TZC400_SET_READONLY 11
-#define TEESMC_OPTEED_TZC400_SET_READONLY \
-	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_TZC400_SET_READONLY)
-
+//定义功能对应的smc指令id
 #define TEESMC_OPTEED_FUNCID_RKP_PTM_INIT 20
 #define TEESMC_OPTEED_RKP_PTM_INIT \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_PTM_INIT)
@@ -48,9 +45,6 @@
 #define TEESMC_OPTEED_FUNCID_RKP_MEM_SET 27
 #define TEESMC_OPTEED_RKP_MEM_SET \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_MEM_SET)
-#define TEESMC_OPTEED_FUNCID_RKP_CFU_PATCH 28
-#define TEESMC_OPTEED_RKP_CFU_PATCH \
-	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_RKP_CFU_PATCH)
 
 #define TEESMC_OPTEED_FUNCID_RKP_SET_ROADDR 40
 #define TEESMC_OPTEED_RKP_SET_ROADDR \
@@ -68,7 +62,7 @@
 #define TEESMC_OPTEED_PKM_SELINUX \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_SELINUX)
 
-
+//取出页表项中物理地址
 #define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)
 
 uintptr_t rkp_process(uint32_t smc_fid,
@@ -79,8 +73,6 @@ uintptr_t rkp_process(uint32_t smc_fid,
         void *cookie,
         void *handle,
         u_register_t flags);
-uintptr_t tzc400_set_readonly(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
 
 #define SET_USED(a) (a = a | 0x80000000)         //使用|，将第31位设置为1
 #define SET_UNUSE(a) (a = a & 0x7FFFFFFF)        //使用&，将第31位设置为0
@@ -95,15 +87,18 @@ uintptr_t tzc400_set_readonly(u_register_t x1,u_register_t x2,u_register_t x3,u_
 #define POOLSZIE 8192
 #define RKP_PAGE_SIZE 4096
 
+//初始化页表
 uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+//分配页表
 uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+//释放页表
 uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
+//设置页表内容
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 #define RKP_INS_SIM_STR_IMM_64 0
 #define RKP_INS_SIM_STR_IMM_32 1
-
+//指令模拟
 #define SIMULATE_STP_XA_XA \
 	unsigned long nw_xa = x2; \
             int nw_xa_low = nw_xa; \
@@ -149,28 +144,28 @@ uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_re
         pa += 1; \
     }
 	
-
+//指令模拟
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
+//写页表
 #define WRITE_ONCE(var, val) \
 	(*((volatile typeof(val) *)(&(var))) = (val))
 #define idsb(opt)	asm volatile("dsb " #opt : : : "memory")
 
-
+//清除页表内容
 uintptr_t rkp_clear_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
+//复制页表
 uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
+//内存设置
 uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
-uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
+//将Normal World传入的参数赋值给保护区域（内核代码段和只读数据段）的物理起始地址和结束地址
 uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
+//设置双重映射保护的标志
 uintptr_t rkp_set_forbid_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
-
+//设置pxn位
 uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+//只读代码段和只读数据段的保护
 uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+//selinux保护功能
 uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
 #endif

@@ -12,11 +12,8 @@ uintptr_t rkp_process(uint32_t smc_fid,
         void *handle,
         u_register_t flags){
     uintptr_t result = NULL_PTR;
-
+    //根据smc指令id执行对应功能
     switch(smc_fid){
-        case TEESMC_OPTEED_TZC400_SET_READONLY:
-            result =  tzc400_set_readonly(x1,x2,x3,x4,handle);
-            break;
         case TEESMC_OPTEED_RKP_PTM_INIT:
             result = rkp_pagetable_manange_init(x1,x2,x3,x4,handle);
             break;
@@ -40,9 +37,7 @@ uintptr_t rkp_process(uint32_t smc_fid,
             break;
         case TEESMC_OPTEED_RKP_MEM_SET:
             result = rkp_mem_set(x1,x2,x3,x4,handle);
-            break;
-        case TEESMC_OPTEED_RKP_CFU_PATCH:
-            result = rkp_cfu_patch(x1,x2,x3,x4,handle);       
+            break;    
         case TEESMC_OPTEED_RKP_SET_ROADDR:
             result = rkp_set_roaddr(x1,x2,x3,x4,handle);
             break;
@@ -62,43 +57,24 @@ uintptr_t rkp_process(uint32_t smc_fid,
             result = NULL_PTR;
             break;
     }
-
     return result;
 }
-uintptr_t tzc400_set_readonly(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
-    char* phyaddress;
-	char* teststr = "Monitor Mode Write Success!";
-	size_t teststrlen = 28;
-    phyaddress = (char *)x1;
-    if(x2 == 1){
-        tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )phyaddress,
-                        (unsigned long long )phyaddress+4096,TZC_REGION_S_RDWR,0x8303);
-    }else{
-        tzc_configure_region((uint32_t)0x0,(uint8_t)3U,0,(unsigned long long)0xfffffffff,0,0);
-    }
-    ERROR("Config Success!\n");
-    ERROR("From NW:%s\n",phyaddress);
-    memcpy(phyaddress,teststr,teststrlen);
-    ERROR("After SW Write:%s\n",phyaddress);
 
-    SMC_RET1(handle,0x0);
-}
-
-static char * PTPOOL;
-static char * PTPOOL_END;
+static char * PTPOOL;//安全内存起始位置
+static char * PTPOOL_END;//安全内存结束位置
 static unsigned int * PTMAP;
 static unsigned int UNUSED;
 static unsigned int USED;
-static int POOLINITED = 0;
+static int POOLINITED = 0;//安全内存区域是否初始化
 static int ALLOCED_PAGE_NUM = 0;
 
-static unsigned long long ro_start;
-static unsigned long long ro_end;
-static bool forbid_flag = 0;
+static unsigned long long ro_start;//内核代码段和只读数据段的起始地址
+static unsigned long long ro_end;//内核代码段和只读数据段的结束地址
+static bool forbid_flag = 0;//双重映射保护功能的标志
 
-
+//初始化页表
 uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
-    char * pa_start = (char*)x1;
+    char * pa_start = (char*)x1;//获取起始地址
     unsigned long result = -1;
     if(sizeof(void*) != sizeof(u_register_t)){
         result = -1;
@@ -116,8 +92,10 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
     PTMAP = (unsigned int *)PTPOOL_END;
     UNUSED = 0;
     USED = INDEXNULL;
+    //初始化安全内存双向链表
     for(int i=0;i<POOLSZIE;i++){
-        SET_UNUSE(PTMAP[i]);
+        SET_UNUSE(PTMAP[i]);//设置所有页表为未使用
+        //设置双向链表的前驱和后继
         if(i == 0){
           SET_PRE_INDEX(PTMAP[i], INDEXNULL);
         }else{
@@ -138,10 +116,11 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
     finished:
     SMC_RET1(handle,result);
 }
-
+//分配页表
 uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
     char * pa_result = NULL;
+    //未进行初始化
     if(POOLINITED == 0){
         result = -1;
         ERROR("page table was uninitialized\n");
@@ -152,7 +131,8 @@ uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,
         char * tempbuffer;
         int pre = GET_PRE_INDEX(PTMAP[temp]);
         int next = GET_NEXT_INDEX(PTMAP[temp]);
-        SET_USED(PTMAP[temp]);
+        SET_USED(PTMAP[temp]);//设置页表已使用
+        //更新安全内存区域中双向链表的前驱后继关系
         if(pre != INDEXNULL){
             SET_NEXT_INDEX(PTMAP[pre], next);
         }else{
@@ -174,7 +154,6 @@ uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,
         result = 0;
         ALLOCED_PAGE_NUM++;
         pa_result = PTPOOL + temp * RKP_PAGE_SIZE;
-        ERROR("get a page %d 0x%016lx\n",ALLOCED_PAGE_NUM,(unsigned long)pa_result);
         goto finished;
     }else{
         result = -1;
@@ -185,10 +164,11 @@ uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,
     finished:
     SMC_RET2(handle,result,(unsigned long)pa_result);
 }
-
+//释放页表
 uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
     char * target = (char *)x1;
+    //未初始化
     if(POOLINITED == 0){
         result = -1;
         ERROR("page table was uninitialized\n");
@@ -196,6 +176,7 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
     }
     int targetIndex =(int)((target - PTPOOL) / RKP_PAGE_SIZE);
     if(-1<targetIndex && POOLSZIE > targetIndex && GET_USED(PTMAP[targetIndex]) == PTUSED){
+        //更新安全内存中双向链表的前驱后继关系
         SET_UNUSE(PTMAP[targetIndex]);
         int pre = GET_PRE_INDEX(PTMAP[targetIndex]);
         int next = GET_NEXT_INDEX(PTMAP[targetIndex]);
@@ -215,7 +196,6 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
         SET_PRE_INDEX(PTMAP[targetIndex], INDEXNULL);
         UNUSED = targetIndex;
         ALLOCED_PAGE_NUM--;
-         ERROR("release a page %d 0x%016lx\n",ALLOCED_PAGE_NUM,(unsigned long)target);
         result = 0;
         goto finished;
         
@@ -227,74 +207,58 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
     finished:
     SMC_RET1(handle,result);
 }
-
+//禁止双重映射
 void Forbid_double_mapping(unsigned long content)
 {
-    // char rw = content & PTE_RDONLY;
+    //读取页表项中的只读权限
     char rw = content & 0x0000000000000080;
+    //读取页表项中的物理地址
     unsigned long pa_addr = pa_addr(content);
-    // ERROR("content:0x%016llx\n", (unsigned long long)content);
-    
-    if(forbid_flag == 1 && pa_addr>=ro_start && pa_addr<=ro_end-4096 && rw == 0)
+    //如果页表项中的物理地址在保护区域（内核代码段和只读数据段）之间，且不为只读，则打出log并panic
+    if(pa_addr>=ro_start && pa_addr<=ro_end-4096 && rw == 0)
     {
         ERROR("Illegal mapping!\n");
-        tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
+        panic();
     }
-	// if(pa_addr>=ro_start && pa_addr<=ro_end-4096 && pa_map_bit(pa_addr) == 1)
-	// {
-	// 	printf("double mapping!\n");
-    //     // dump_stack();
-	// }
-	// else if(pa_addr>=ro_start && pa_addr<=ro_end-4096)
-	// {
-	// 	pa_map_bit_fill(pa_addr);
-	// 	printf("pa_map_loc:0x%016llx\n",(unsigned long long)pa_map_loc(pa_addr));
-	// }
 	return;
 }
-
+//设置页表内容
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
     //unsigned long pagetable_type = x1;
     unsigned long * target = (unsigned long *)x2;
     unsigned long content = x3;
-    Forbid_double_mapping(content);
-    WRITE_ONCE(*target,content);
+    //如果开启防止双重映射标志为1，则进一步防止双重映射
+    if(forbid_flag == 1)
+    {
+        Forbid_double_mapping(content);
+    }
+    WRITE_ONCE(*target,content);//写入页表内容
     idsb(ishst);
     result = 0;
-    // switch(pagetable_type){
-    //     case 0:
-    //         ERROR("write PTE to 0x%016lx 0x%016lx\n",x2,x3);
-    //         break;
-    //     case 1:
-    //         ERROR("write PMD to 0x%016lx 0x%016lx\n",x2,x3);
-    //         break;
-    //     case 2:
-    //         ERROR("write PUD to 0x%016lx 0x%016lx\n",x2,x3);
-    //         break;
-    //     case 3:
-    //         ERROR("write PGD to 0x%016lx 0x%016lx\n",x2,x3);
-    //         break;
-    //     default:
-    //         ERROR("write to 0x%016lx 0x%016lx\n",x2,x3);
-    //         break;        
-    // }
     SMC_RET1(handle,result);
 }
-
+//指令模拟
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
     unsigned long instruction = x1;
     unsigned long phys_addr = x4;
-    NOTICE("rkp_instruction_simulation | inst: 0x%08lx, write_phys_addr: 0x%016lx\n", instruction, phys_addr);
     result = 0;
     char *pa = (char *)phys_addr;
     int i, j;
-
+    //检查双重映射
+    unsigned long content1 = x2;
+    unsigned long content2 = x3;
+    //如果开启防止双重映射标志为1，则进一步防止双重映射
+    if(forbid_flag == 1)
+    {
+        Forbid_double_mapping(content1);
+        Forbid_double_mapping(content2);
+    }
     switch(instruction) {
         // instruction in __memset()
+        //模拟srtb w7, [x8]指令
         case 0x39000107: {
-            NOTICE("get instr: srtb w7, [x8]\n");
             int w7 = x2;
             for (i = 0; i < 1; i++) {
                 memset(pa, w7, 1);
@@ -303,8 +267,8 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
             break;
         }
+        //模拟 strh w7, [x8], #2指令
         case 0x78002507: {
-            NOTICE("get instr: strh w7, [x8], #2\n");
             int w7 = x2;
             for (i = 0; i < 2; i++) {
                 memset(pa, w7, 1);
@@ -313,8 +277,8 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
             break;
         }
+        //模拟 str w7, [x8], #4指令
         case 0xb8004507: {
-            NOTICE("get instr: str w7, [x8], #4\n");
             int w7 = x2;
             for (i = 0; i < 4; i++) {
                 memset(pa, w7, 1);
@@ -323,8 +287,8 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
             break;
         }
+        //模拟 str x7, [x8], #8指令
         case 0xf8008507: {
-            NOTICE("get instr: str x7, [x8], #8\n");
             int x7_l = x2;
             int x7_h = x2 >> 32;
             for (i = 0; i < 4; i++) {
@@ -339,36 +303,35 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
             break;
         }
-
+        //模拟 stp x7, x7, [x8]指令
         case 0xa9001d07: {
-            NOTICE("get instr: stp x7, x7, [x8]\n");
             SIMULATE_STP_XA_XA
             break;
         }
+        //模拟 stp x7, x7, [x8, #0x10]指令
         case 0xa9011d07: {
-            NOTICE("get instr: stp x7, x7, [x8, #0x10]\n");
             SIMULATE_STP_XA_XA
             break;
         }
+        //模拟 stp x7, x7, [x8, #0x20]指令
         case 0xa9021d07: {
-            NOTICE("get instr: stp x7, x7, [x8, #0x20]\n");
             SIMULATE_STP_XA_XA
             break;
         }
+        //模拟 stp x7, x7, [x8, #0x30]指令
         case 0xa9031d07: {
-            NOTICE("get instr: stp x7, x7, [x8, #0x30]\n");
             SIMULATE_STP_XA_XA
             break;
         }
+        //模拟 dc zva, x8指令
         case 0xd50b7428: {
-            NOTICE("get instr: dc zva, x8\n");
             memset(pa, 0, 1024);
             break;
         }
 
         // instruction in __arch_copy_from_user()
-		case 0xf80084c3: {
-            NOTICE("get instr: str x3, [x6], #8\n");
+        //模拟  str x3, [x6], #8指令
+         case 0xf80084c3: {
             int x3_l = x2;
             int x3_h = x2 >> 32;
             for (i = 0; i < 4; i++) {
@@ -383,8 +346,8 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
 			break;
         }
-		case 0xb80044c3: {
-            NOTICE("get instr: str w3, [x6], #4\n");
+        //模拟 str w3, [x6], #4指令
+        case 0xb80044c3: {
             int w3 = x2;
             for (i = 0; i < 4; i++) {
                 memset(pa, w3, 1);
@@ -393,8 +356,8 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
 			break;
         }
-		case 0x780024c3: {
-            NOTICE("get instr: strh w3, [x6], #2\n");
+        //模拟 strh w3, [x6], #2指令
+        case 0x780024c3: {
             int w3 = x2;
             for (i = 0; i < 2; i++) {
                 memset(pa, w3, 1);
@@ -403,8 +366,8 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
 			break;
         }
-		case 0x380014c3: {
-            NOTICE("get instr: strb w3, [x6], #1\n");
+        //模拟 strb w3, [x6], #1指令
+        case 0x380014c3: {
             int w3 = x2;
             for (i = 0; i < 1; i++) {
                 memset(pa, w3, 1);
@@ -413,24 +376,23 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
             }
 			break;
         }
-
+        //模拟stp x7, x8, [x6], #0x10指令
         case 0xa88120c7: {
-            NOTICE("get instr: stp x7, x8, [x6], #0x10\n");
             SIMULATE_STP_XA_XB
             break;
         }
+        //模拟stp x9, x10, [x6], #0x10指令
         case 0xa88128c9: {
-            NOTICE("get instr: stp x9, x10, [x6], #0x10\n");
             SIMULATE_STP_XA_XB
             break;
         }
+        //模拟 stp x11, x12, [x6], #0x10指令
         case 0xa88130cb: {
-            NOTICE("get instr: stp x11, x12, [x6], #0x10\n");
             SIMULATE_STP_XA_XB
             break;
         }
+        //模拟 stp x13, x14, [x6], #0x10指令
         case 0xa88138cd: {
-            NOTICE("get instr: stp x13, x14, [x6], #0x10\n");
             SIMULATE_STP_XA_XB
             break;
         }
@@ -442,71 +404,53 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
     }
     SMC_RET1(handle,result);
 }
-
+//清除页表内容
 uintptr_t rkp_clear_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     void * targetPage_pa_va = (void *)x1;
     memset(targetPage_pa_va, 0, PAGE_SIZE);
     SMC_RET1(handle,0);
 }
-
+//复制页表
 uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     char * to = (char*)x1;
     char* from = (char*)x2;
     unsigned long n = x3;
+    //内存拷贝
     memcpy(to,from,n);
     SMC_RET2(handle,0,n);
 }
+//内存设置
 uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     void * result;
     result = memset((void*)x1,x2,x3);
     SMC_RET2(handle,0,(unsigned long)result);
 }
-static int do_cfu_patch_counts = 0;
-uintptr_t rkp_cfu_patch(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
-    if(x1 == 1){
-        if(do_cfu_patch_counts == 0){
-            tzc_configure_region((uint32_t)0x0,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
-        }
-        do_cfu_patch_counts++;
-    }else{
-        do_cfu_patch_counts--;
-        if(do_cfu_patch_counts == 0){
-            tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE,TZC_REGION_S_RDWR,0x8303);
-        }
-    }
 
-    SMC_RET0(handle);
-}
+//将Normal World传入的参数赋值给保护区域（内核代码段和只读数据段）的物理起始地址和结束地址
 uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     ro_start = (unsigned long long)x1;
     ro_end = (unsigned long long)x2;
     ERROR("text_start：%016llx, end:%016llx\n",ro_start,ro_end);
     SMC_RET1(handle,0);
 }
+//设置双重映射保护的标志
 uintptr_t rkp_set_forbid_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     forbid_flag = 1;
     SMC_RET1(handle,0);
 }
-
+//设置pxn位
 uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
-    // unsigned long content = (unsigned long)x1;
-    // ERROR("pte:0x%016lx\n",x1);
+    //取出Normal World传来的物理地址
     unsigned long long pte_pa = (unsigned long long)x1;
-    ERROR("pte_pa:0x%016llx",pte_pa);
+    //根据物理地址读取对应页表项内容
     unsigned long long *content = (unsigned long long *)pte_pa;
-    // char *content = (char *)pte_pa;
-    ERROR("pte:0x%016llx\n",*content);
-    // ERROR("pte:0x%016llx\n",*content);
+    //读取PXN位
     unsigned long long p = *content & 0x0020000000000000;
+    //如果PXN位为0则打出log并将其置为1
     if (p == 0x0)
     {
         ERROR("pxn not set!\n");
         *content |= 0x0020000000000000;
-        // tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
-        // *content |= 0x0020000000000000;
-        // x1 |= 0x0020000000000000;
     }
     
     SMC_RET1(handle,0);
@@ -523,10 +467,8 @@ uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register
 #include <tools_share/uuid.h>
 #include<drivers/delay_timer.h>
 
-static unsigned long long ro_start;//用来存储所保护的内核地址区间的首地址
-static unsigned long long ro_end;//用来存储所保护的内核地址区间的尾地址
-
 static char check = 0xff;//初始化check变量，用来表示完整性检查后的结果
+//只读代码段和只读数据段的保护
 uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     int result=1;//返回至nw的结果，如果是1表示通过完整性检查，如果是0表示没有通过完整性检查   
     char *start = (char *)(ro_start);
@@ -553,8 +495,7 @@ uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u
 	else 
 	{
 		ERROR("rodata error!\n");
-        //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
-        result=0;//完整性检查出错，将返回至nw的result值设置为0
+        result = 0;//完整性检查出错，将返回至nw的result值设置为0
         printf("there is an error....................");
 	}
     SMC_RET1(handle,result);
@@ -562,7 +503,7 @@ uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u
 
 static unsigned long long int *enabled_addr = NULL;
 static bool *enforcing_addr = NULL;
-
+//selinux保护功能
 uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     int result=1;    
     if(enabled_addr == NULL)
@@ -570,7 +511,6 @@ uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register
         enabled_addr = (unsigned long long *)x1;
         enforcing_addr = (bool *)x2;
         ERROR("selinux_enabled:%lld, addr:%016llx\n",*enabled_addr,(unsigned long long int)enabled_addr);
-        // ERROR("selinux_enforcing: addr:%016llx\n",(unsigned long long int)enforcing_addr);
         ERROR("selinux_enforcing:%x, addr:%016llx\n",*enforcing_addr,(unsigned long long int)enforcing_addr);
         SMC_RET1(handle,0);
     }
@@ -581,9 +521,8 @@ uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register
     else 
     {
         ERROR("selinux unsafe!\n");
-        result=0;
+        result = 0;
         printf("there is an error....................");
-        //tzc_configure_region((uint32_t)0x3,(uint8_t)4U,0,(unsigned long long)0xfffffffff,TZC_REGION_S_NONE,0);
     }
     SMC_RET1(handle,result);
 }

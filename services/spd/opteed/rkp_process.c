@@ -1,6 +1,7 @@
 #include <lib/xlat_tables/xlat_tables_v2.h>
 #include <drivers/arm/tzc400.h>
 #include <string.h>
+#include <arch_helpers.h>
 #include "rkp_process.h"
 
 uintptr_t rkp_process(uint32_t smc_fid,
@@ -456,48 +457,170 @@ uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register
     SMC_RET1(handle,0);
 }
 
-#include<context.h>
-#include <arch_helpers.h>
-#include <bl31/bl31.h>
-#include <common/bl_common.h>
-#include <common/debug.h>
-#include <common/runtime_svc.h>
-#include <lib/el3_runtime/context_mgmt.h>
-#include <plat/common/platform.h>
-#include <tools_share/uuid.h>
-#include<drivers/delay_timer.h>
 
-static char check = 0xff;//初始化check变量，用来表示完整性检查后的结果
+//PKM
+
+static int check_flag = 0;
+static BYTE check[GROUP_SIZE][SHA256_BLOCK_SIZE];
+
+void sha256_transform(SHA256_CTX *ctx, const BYTE data[])
+{
+	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[64];
+
+	for (i = 0, j = 0; i < 16; ++i, j += 4)
+		m[i] = (data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
+	for ( ; i < 64; ++i)
+		m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
+
+	a = ctx->state[0];
+	b = ctx->state[1];
+	c = ctx->state[2];
+	d = ctx->state[3];
+	e = ctx->state[4];
+	f = ctx->state[5];
+	g = ctx->state[6];
+	h = ctx->state[7];
+
+	for (i = 0; i < 64; ++i) {
+		t1 = h + EP1(e) + CH(e,f,g) + k[i] + m[i];
+		t2 = EP0(a) + MAJ(a,b,c);
+		h = g;
+		g = f;
+		f = e;
+		e = d + t1;
+		d = c;
+		c = b;
+		b = a;
+		a = t1 + t2;
+	}
+
+	ctx->state[0] += a;
+	ctx->state[1] += b;
+	ctx->state[2] += c;
+	ctx->state[3] += d;
+	ctx->state[4] += e;
+	ctx->state[5] += f;
+	ctx->state[6] += g;
+	ctx->state[7] += h;
+}
+
+void sha256_init(SHA256_CTX *ctx)
+{
+	ctx->datalen = 0;
+	ctx->bitlen = 0;
+	ctx->state[0] = 0x6a09e667;
+	ctx->state[1] = 0xbb67ae85;
+	ctx->state[2] = 0x3c6ef372;
+	ctx->state[3] = 0xa54ff53a;
+	ctx->state[4] = 0x510e527f;
+	ctx->state[5] = 0x9b05688c;
+	ctx->state[6] = 0x1f83d9ab;
+	ctx->state[7] = 0x5be0cd19;
+}
+
+void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len)
+{
+	WORD i;
+    for (i = 0; i < len; i+=GROUP_SIZE) {
+		ctx->data[ctx->datalen] = data[i];
+		ctx->datalen++;
+		if (ctx->datalen == 64) {
+			sha256_transform(ctx, ctx->data);
+			ctx->bitlen += 512;
+			ctx->datalen = 0;
+		}
+	}
+
+}
+
+void sha256_final(SHA256_CTX *ctx, BYTE hash[])
+{
+	WORD i;
+
+	i = ctx->datalen;
+
+	if (ctx->datalen < 56) {
+		ctx->data[i++] = 0x80;
+		while (i < 56)
+			ctx->data[i++] = 0x00;
+	}
+	else {
+		ctx->data[i++] = 0x80;
+		while (i < 64)
+			ctx->data[i++] = 0x00;
+		sha256_transform(ctx, ctx->data);
+		memset(ctx->data, 0, 56);
+	}
+
+	ctx->bitlen += ctx->datalen * 8;
+	ctx->data[63] = ctx->bitlen;
+	ctx->data[62] = ctx->bitlen >> 8;
+	ctx->data[61] = ctx->bitlen >> 16;
+	ctx->data[60] = ctx->bitlen >> 24;
+	ctx->data[59] = ctx->bitlen >> 32;
+	ctx->data[58] = ctx->bitlen >> 40;
+	ctx->data[57] = ctx->bitlen >> 48;
+	ctx->data[56] = ctx->bitlen >> 56;
+	sha256_transform(ctx, ctx->data);
+
+	for (i = 0; i < 4; ++i) {
+		hash[i]      = (ctx->state[0] >> (24 - i * 8)) & 0x000000ff;
+		hash[i + 4]  = (ctx->state[1] >> (24 - i * 8)) & 0x000000ff;
+		hash[i + 8]  = (ctx->state[2] >> (24 - i * 8)) & 0x000000ff;
+		hash[i + 12] = (ctx->state[3] >> (24 - i * 8)) & 0x000000ff;
+		hash[i + 16] = (ctx->state[4] >> (24 - i * 8)) & 0x000000ff;
+		hash[i + 20] = (ctx->state[5] >> (24 - i * 8)) & 0x000000ff;
+		hash[i + 24] = (ctx->state[6] >> (24 - i * 8)) & 0x000000ff;
+		hash[i + 28] = (ctx->state[7] >> (24 - i * 8)) & 0x000000ff;
+	}
+}
+
+long rand(long time)
+{
+    return (((time * 214013L + 2531011L) >> 16) & 0x7fff);
+}
+
 //只读代码段和只读数据段的保护
 uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     int result=1;//返回至nw的结果，如果是1表示通过完整性检查，如果是0表示没有通过完整性检查   
     char *start = (char *)(ro_start);
     char *end =   (char *)(ro_end);
     //ERROR("rodata start:%016llx,end:%016llx\n",(unsigned long long int)start,(unsigned long long int)end);
-    char new_check = *start;
-    start++;
-    while(start != end)
-	{
-		new_check ^= *start;//进行异或操作
-		start++;
-	}
-    ERROR("new_check:0x%02x\n",new_check);
-	//ERROR("check:0x%02x\n",check);
-	if(check == 0xff)
-	{
-		check = new_check;
-		ERROR("change check:0x%02x\n",check);
-	}
-	else if (check == new_check)
-	{
-		ERROR("rodata safe!\n");
-	}
-	else 
-	{
-		ERROR("rodata error!\n");
-        result = 0;//完整性检查出错，将返回至nw的result值设置为0
-        printf("there is an error....................");
-	}
+
+    SHA256_CTX ctx;
+    BYTE new_check[SHA256_BLOCK_SIZE];
+
+    if(check_flag == 0)
+    {
+        for(int i = 0; i<GROUP_SIZE; i++)
+        {
+            sha256_init(&ctx);
+	        sha256_update(&ctx, (BYTE *)(start + i), (long long)end-(long long)start-i);
+	        sha256_final(&ctx, new_check);
+            memcpy(check[i],new_check,SHA256_BLOCK_SIZE);
+        }
+        check_flag = 1;
+    }
+    else
+    {
+        long time = read_cntpct_el0();
+        int r = rand(time) % GROUP_SIZE;
+
+        sha256_init(&ctx);
+	    sha256_update(&ctx, (BYTE *)(start + r), (long long)end-(long long)start-r);
+	    sha256_final(&ctx, new_check);
+
+        if (memcmp(check[r],new_check,SHA256_BLOCK_SIZE) == 0)
+        {
+            ERROR("rodata safe!\n");
+        }
+        else 
+        {
+            ERROR("rodata error!\n");
+            result = 0;//完整性检查出错，将返回至nw的result值设置为0
+            printf("there is an error....................");
+        }
+    }
     SMC_RET1(handle,result);
 }
 

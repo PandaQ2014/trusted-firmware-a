@@ -54,6 +54,34 @@ uintptr_t rkp_process(uint32_t smc_fid,
         case TEESMC_OPTEED_PKM_SELINUX:
             result = pkm_selinux(x1,x2,x3,x4,handle);
             break;
+        case TEESMC_OPTEED_KILL_HOOK:
+            result = find_task_addr(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_PUSH_TASKADDR:
+            result = push_task_addr(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_SET_PUSH_TASKADDR_FLAG:
+            result = set_push_flag(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_SET_PID_AND_STACK:
+            result = set_pid_and_stack(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_FREE_PID_AND_STACK:
+            result = free_pid_and_stack(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_INIT_PID_AND_STACK:
+            printf("teec init\n");
+            result = init_pid_and_stack(x1,x2,x3,x4,handle);
+            break;
+        // case TEESMC_OPTEED_FUNCID_SET_STACK_HASH:
+        //     result = set_stack_hash(x1,x2,x3,x4,handle);
+        //     break;
+        case TEESMC_OPTEED_SWITCH_STACK:
+            result = switch_pid_and_stack(x1,x2,x3,x4,handle);
+            break;
+        // case TEESMC_OPTEED_FUNCID_CHECK_PID_AND_STACK:
+        //     result = check_pid_and_stack(x1,x2,x3,x4,handle);
+        //     break;
         default:
             result = NULL_PTR;
             break;
@@ -68,6 +96,9 @@ static unsigned int UNUSED;
 static unsigned int USED;
 static int POOLINITED = 0;//安全内存区域是否初始化
 static int ALLOCED_PAGE_NUM = 0;
+
+static char * SSPOOL;
+static char * SSPOOL_END;
 
 static unsigned long long ro_start;//内核代码段和只读数据段的起始地址
 static unsigned long long ro_end;//内核代码段和只读数据段的结束地址
@@ -91,6 +122,8 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
     PTPOOL = pa_start;
     PTPOOL_END = pa_start+POOLSZIE*RKP_PAGE_SIZE;
     PTMAP = (unsigned int *)PTPOOL_END;
+    SSPOOL = PTPOOL_END+sizeof(unsigned int)*POOLSZIE;
+    SSPOOL_END = SSPOOL + sizeof(STACK_STRUCT)*PID_SIZE;
     UNUSED = 0;
     USED = INDEXNULL;
     //初始化安全内存双向链表
@@ -108,8 +141,12 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
             SET_NEXT_INDEX(PTMAP[i], i+1);
         }
     }
+    // tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
+                // (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x83038303);
+    // tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
+    //             (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE + sizeof(STACK_STRUCT) * PID_SIZE -1,TZC_REGION_S_RDWR,0x83038303);
     tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x83038303);
+                (unsigned long long )SSPOOL_END -1,TZC_REGION_S_RDWR,0x83038303);
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
@@ -530,7 +567,20 @@ void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len)
 			ctx->datalen = 0;
 		}
 	}
+}
 
+void sha256_update_stack(SHA256_CTX *ctx, const BYTE data[], size_t len)
+{
+	WORD i;
+    for (i = 0; i < len; i += 1) {
+		ctx->data[ctx->datalen] = data[i];
+		ctx->datalen++;
+		if (ctx->datalen == 64) {
+			sha256_transform(ctx, ctx->data);
+			ctx->bitlen += 512;
+			ctx->datalen = 0;
+		}
+	}
 }
 
 void sha256_final(SHA256_CTX *ctx, BYTE hash[])
@@ -647,5 +697,184 @@ uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register
         result = 0;
         printf("there is an error....................");
     }
+    // visit_pid_and_stack();
     SMC_RET1(handle,result);
 }
+
+//所保护进程数组
+static unsigned long long protected_taskaddr[PROTECTED_TASKADDR_MAXSIZE] = {0};
+//数组大小
+static short protected_taskaddr_size = 0;
+//是否能再添加保护进程的标志
+static bool push_taskaddr_flag = true;
+
+//遍历保护的进程
+void visit_pid()
+{
+    for(int i = 0; i < protected_taskaddr_size; i++)
+    {
+        printf("0x%016llx ", protected_taskaddr[i]);
+    }
+    printf("\n");
+}
+
+//查找传入的进程标识是否在受保护进程数组中
+uintptr_t find_task_addr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    // visit_pid();
+    for(int i = 0; i < protected_taskaddr_size; i++)
+    {
+        if(protected_taskaddr[i] == x1)
+            SMC_RET1(handle, 1);
+    }
+    SMC_RET1(handle, 0);
+}
+
+//将传入的进程标识添加到受保护进程数组中
+uintptr_t push_task_addr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    if(!push_taskaddr_flag || protected_taskaddr_size >= PROTECTED_TASKADDR_MAXSIZE)
+        SMC_RET1(handle, -1);
+    protected_taskaddr[protected_taskaddr_size] = x1;
+    protected_taskaddr_size++;
+    // visit_pid();
+    SMC_RET1(handle, 1);
+}
+
+//将能否添加受保护进程的flag设置为false 不再可以添加进程
+uintptr_t set_push_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    push_taskaddr_flag = false;
+    SMC_RET1(handle, 1);
+}
+
+
+// 保护内核栈的结构体
+// static STACK_STRUCT * stack_struct_hash;
+static STACK_STRUCT stack_struct_hash[PID_SIZE];
+static int stack_struct_hash_size = 0;
+// static short pid_array[PID_SIZE];
+// static unsigned long long stack_struct_hash[PID_SIZE];
+
+void visit_pid_and_stack()
+{
+    for(int i = 0; i < stack_struct_hash_size; i++)
+    {
+        // if(stack_struct_hash[i].state == 1)
+        //     ERROR("pid: %d, stack:0x%016lx\n", i, stack_struct_hash[i].stack);
+        ERROR("pid:%d, state:%d, stack:0x%016lx\n", stack_struct_hash[i].pid, (int)stack_struct_hash[i].state, stack_struct_hash[i].stack);
+    }
+}
+
+//设置进程标识对应的内核栈基地址
+uintptr_t set_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    stack_struct_hash[stack_struct_hash_size].state = 1;
+    stack_struct_hash[stack_struct_hash_size].pid = (short)x1;
+    stack_struct_hash[stack_struct_hash_size].stack = (unsigned long)x2;
+    ERROR("size: %d, set  pid: %d, state:%d, stack:0x%016lx\n", stack_struct_hash_size, stack_struct_hash[stack_struct_hash_size].pid, 
+        (int)stack_struct_hash[stack_struct_hash_size].state, stack_struct_hash[stack_struct_hash_size].stack);
+    stack_struct_hash_size++;
+    // stack_struct_hash[x1].state = 1;
+    // stack_struct_hash[x1].stack = (unsigned long)x2;
+    // ERROR("set  pid: %d, state:%d, stack:0x%016lx\n", (int)x1, (int)stack_struct_hash[x1].state,stack_struct_hash[x1].stack);
+    SMC_RET1(handle, 1);
+}
+
+//释放进程标识对应的内核栈基地址
+uintptr_t free_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    for(int i = stack_struct_hash_size - 1; i >= 0; --i)
+    {
+        if(stack_struct_hash[i].pid == (short)x1)
+        {
+            ERROR("size: %d, free  pid: %d, state:%d\n", stack_struct_hash_size, (short)stack_struct_hash[i].pid, (int)stack_struct_hash[i].state);
+            if(i != stack_struct_hash_size - 1)
+            {
+                stack_struct_hash[i].pid = stack_struct_hash[stack_struct_hash_size - 1].pid;
+                stack_struct_hash[i].state = stack_struct_hash[stack_struct_hash_size - 1].state;
+                stack_struct_hash[i].stack = stack_struct_hash[stack_struct_hash_size - 1].stack;
+            }
+            stack_struct_hash_size--;
+            break;
+        }
+    }
+    // ERROR("free  pid: %d, state:%d\n", (int)x1, (int)stack_struct_hash[x1].state);
+    SMC_RET1(handle, 1);
+}
+
+//初始化保护内核栈结构体
+uintptr_t init_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    printf("init\n\n");
+    // stack_struct_hash = (STACK_STRUCT *) SSPOOL; 
+    // ERROR("aaaaaaaa %d, 0x%016lx", stack_struct_hash[0].state, stack_struct_hash[0].stack);
+    // for(int i = 0; i < 10; i++)
+    // {
+    //     stack_struct_hash[i].state = 0;
+    //     stack_struct_hash[i].stack = (unsigned long)NULL;
+    // }
+    // visit_pid_and_stack();
+    SMC_RET1(handle, 1);
+}
+
+//检查内核栈基地址是否与存储值相同
+bool check_stack(int pid, unsigned long long stack_addr)
+{
+    if(stack_struct_hash[pid].stack != stack_addr)
+        return false;
+    return true;
+}
+
+// //检查内核栈hash值是否与之前相同
+// bool check_hash(int pid, unsigned long long stack_addr)
+// {
+//     SHA256_CTX ctx;
+//     BYTE new_hash[SHA256_BLOCK_SIZE];
+//     sha256_init(&ctx);
+// 	sha256_update_stack(&ctx, (BYTE *)stack_addr, STACK_SIZE - 1);
+//     sha256_final(&ctx, new_hash);
+//     if (memcmp(stack_struct_hash[pid].hash,new_hash,SHA256_BLOCK_SIZE) == 0)
+//         return true;
+//     return false;
+// }
+
+// //进程切换时保存内核栈hash值
+// uintptr_t set_stack_hash(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+// {
+//     if(!check_stack((int)x1, x2))
+//     {
+//         ERROR("bad stack address\n");
+//         SMC_RET1(handle, 0);
+//     }
+//     SHA256_CTX ctx;
+//     BYTE new_hash[SHA256_BLOCK_SIZE];
+//     sha256_init(&ctx);
+// 	sha256_update_stack(&ctx, (BYTE *)stack_struct_hash[x1].stack, STACK_SIZE - 1);
+//     sha256_final(&ctx, new_hash);
+//     memcpy(stack_struct_hash[x1].hash, new_hash, SHA256_BLOCK_SIZE);
+//     SMC_RET1(handle, 1);
+// }
+
+//进程切换后被切换的进程
+uintptr_t switch_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+
+    SMC_RET1(handle, 1);
+}
+
+// //检查内核栈基地址和hash值是否与存储的相同
+// uintptr_t check_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+// {
+//     if(!check_stack((int)x1, x2))
+//     {
+//         ERROR("bad stack address\n");
+//         SMC_RET1(handle, 0);
+//     }
+//     if(!check_hash((int)x1, x2))
+//     {
+//         ERROR("bad hash\n");
+//         SMC_RET1(handle, 0);
+//     }
+//     SMC_RET1(handle, 1);
+// }

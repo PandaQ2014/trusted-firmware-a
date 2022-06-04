@@ -62,6 +62,35 @@
 #define TEESMC_OPTEED_PKM_SELINUX \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PKM_SELINUX)
 
+#define TEESMC_OPTEED_FUNCID_KILL_HOOK 80
+#define TEESMC_OPTEED_KILL_HOOK \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_KILL_HOOK)
+#define TEESMC_OPTEED_FUNCID_PUSH_TASKADDR 81
+#define TEESMC_OPTEED_PUSH_TASKADDR \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_PUSH_TASKADDR)
+#define TEESMC_OPTEED_FUNCID_SET_PUSH_TASKADDR_FLAG 82
+#define TEESMC_OPTEED_SET_PUSH_TASKADDR_FLAG \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_SET_PUSH_TASKADDR_FLAG)
+
+#define TEESMC_OPTEED_FUNCID_SET_PID_AND_STACK 90
+#define TEESMC_OPTEED_SET_PID_AND_STACK \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_SET_PID_AND_STACK)
+#define TEESMC_OPTEED_FUNCID_FREE_PID_AND_STACK 91
+#define TEESMC_OPTEED_FREE_PID_AND_STACK \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_FREE_PID_AND_STACK)
+#define TEESMC_OPTEED_FUNCID_INIT_PID_AND_STACK 92
+#define TEESMC_OPTEED_INIT_PID_AND_STACK \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_INIT_PID_AND_STACK)
+#define TEESMC_OPTEED_FUNCID_SET_STACK_HASH 93
+#define TEESMC_OPTEED_SET_STACK_HASH \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_SET_STACK_HASH)
+#define TEESMC_OPTEED_FUNCID_SWITCH_STACK 94
+#define TEESMC_OPTEED_SWITCH_STACK \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_SWITCH_STACK)
+#define TEESMC_OPTEED_FUNCID_CHECK_PID_AND_STACK 95
+#define TEESMC_OPTEED_CHECK_PID_AND_STACK \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_CHECK_PID_AND_STACK)
+
 //取出页表项中物理地址
 #define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)
 
@@ -168,6 +197,26 @@ uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u
 //selinux保护功能
 uintptr_t pkm_selinux(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
+uintptr_t find_task_addr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t push_task_addr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t set_push_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t set_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t free_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t init_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t set_stack_hash(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t check_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t switch_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+void visit_pid_and_stack();
+
 #define GROUP_SIZE 8
 
 #define SHA256_BLOCK_SIZE 32            // SHA256 outputs a 32 byte digest
@@ -210,5 +259,29 @@ void sha256_init(SHA256_CTX *ctx);
 void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len);
 
 void sha256_final(SHA256_CTX *ctx, BYTE hash[]);
+
+//受保护进程数组的最大值
+#define PROTECTED_TASKADDR_MAXSIZE 10
+
+//保护内核栈的结构体
+// typedef struct
+// {
+//     char state;
+//     unsigned long stack;
+//     // BYTE hash[SHA256_BLOCK_SIZE];
+// }STACK_STRUCT;
+
+typedef struct
+{
+    short pid;
+    char state;
+    unsigned long stack;
+    // BYTE hash[SHA256_BLOCK_SIZE];
+}STACK_STRUCT;
+
+//进程标识的最大值
+#define PID_SIZE 2000
+//内核栈大小
+#define STACK_SIZE 16384
 
 #endif

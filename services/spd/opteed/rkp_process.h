@@ -71,6 +71,15 @@
 #define TEESMC_OPTEED_FUNCID_SET_PUSH_TASKADDR_FLAG 82
 #define TEESMC_OPTEED_SET_PUSH_TASKADDR_FLAG \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_SET_PUSH_TASKADDR_FLAG)
+#define TEESMC_OPTEED_FUNCID_SET_CRED 83
+#define TEESMC_OPTEED_SET_CRED \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_SET_CRED)
+#define TEESMC_OPTEED_FUNCID_FREE_CRED 84
+#define TEESMC_OPTEED_FREE_CRED \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_FREE_CRED)
+#define TEESMC_OPTEED_FUNCID_CHECK_CRED 85
+#define TEESMC_OPTEED_CHECK_CRED \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_CHECK_CRED)
 
 #define TEESMC_OPTEED_FUNCID_SET_PID_AND_STACK 90
 #define TEESMC_OPTEED_SET_PID_AND_STACK \
@@ -90,6 +99,9 @@
 #define TEESMC_OPTEED_FUNCID_CHECK_PID_AND_STACK 95
 #define TEESMC_OPTEED_CHECK_PID_AND_STACK \
 	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_CHECK_PID_AND_STACK)
+#define TEESMC_OPTEED_FUNCID_VISIT_STACK_STRUCT 96
+#define TEESMC_OPTEED_VISIT_STACK_STRUCT \
+	TEESMC_OPTEED_RV(TEESMC_OPTEED_FUNCID_VISIT_STACK_STRUCT)
 
 //取出页表项中物理地址
 #define pa_addr(content) (unsigned long long)(content&0x0000fffffffff000)
@@ -215,6 +227,14 @@ uintptr_t check_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_
 
 uintptr_t switch_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
 
+uintptr_t visit_stack_struct(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t set_cred(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t check_cred(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
+uintptr_t free_cred(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle);
+
 void visit_pid_and_stack();
 
 #define GROUP_SIZE 8
@@ -260,27 +280,40 @@ void sha256_update(SHA256_CTX *ctx, const BYTE data[], size_t len);
 
 void sha256_final(SHA256_CTX *ctx, BYTE hash[]);
 
+void init_stack_struct();
+
+void init_cred_struct();
+
 //受保护进程数组的最大值
 #define PROTECTED_TASKADDR_MAXSIZE 10
 
-//保护内核栈的结构体
-// typedef struct
-// {
-//     char state;
-//     unsigned long stack;
-//     // BYTE hash[SHA256_BLOCK_SIZE];
-// }STACK_STRUCT;
 
+//stack protection
 typedef struct
 {
     short pid;
     char state;
     unsigned long stack;
-    // BYTE hash[SHA256_BLOCK_SIZE];
+    BYTE hash[SHA256_BLOCK_SIZE];
 }STACK_STRUCT;
 
+//cred protection
+typedef struct
+{
+    short pid;
+    unsigned long cred_addr;
+    unsigned long task_struct_addr;
+    unsigned long pgd;
+    unsigned int uid;
+    unsigned int gid;
+    unsigned int suid;
+    unsigned int sgid;
+    unsigned int euid;
+    unsigned int egid;
+}CRED_STRUCT;
+
 //进程标识的最大值
-#define PID_SIZE 2000
+#define PID_SIZE 700
 //内核栈大小
 #define STACK_SIZE 16384
 

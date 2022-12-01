@@ -4,6 +4,7 @@
 #include <arch_helpers.h>
 #include "rkp_process.h"
 
+
 uintptr_t rkp_process(uint32_t smc_fid,
         u_register_t x1,
         u_register_t x2,
@@ -82,6 +83,18 @@ uintptr_t rkp_process(uint32_t smc_fid,
         // case TEESMC_OPTEED_FUNCID_CHECK_PID_AND_STACK:
         //     result = check_pid_and_stack(x1,x2,x3,x4,handle);
         //     break;
+        case TEESMC_OPTEED_VISIT_STACK_STRUCT:
+            result = visit_stack_struct(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_SET_CRED:
+            result = set_cred(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_CHECK_CRED:
+            result = check_cred(x1,x2,x3,x4,handle);
+            break;
+        case TEESMC_OPTEED_FREE_CRED:
+            result = free_cred(x1,x2,x3,x4,handle);
+            break;
         default:
             result = NULL_PTR;
             break;
@@ -104,6 +117,13 @@ static unsigned long long ro_start;//内核代码段和只读数据段的起始�
 static unsigned long long ro_end;//内核代码段和只读数据段的结束地址
 static bool forbid_flag = 0;//双重映射保护功能的标志
 
+static STACK_STRUCT * stack_struct_table;
+static int stack_struct_table_size = 0;
+
+// static CRED_STRUCT cred_struct_table[PID_SIZE];
+static CRED_STRUCT *cred_struct_table;
+static int cred_struct_table_size = 0;
+
 //初始化页表
 uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     char * pa_start = (char*)x1;//获取起始地址
@@ -122,8 +142,12 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
     PTPOOL = pa_start;
     PTPOOL_END = pa_start+POOLSZIE*RKP_PAGE_SIZE;
     PTMAP = (unsigned int *)PTPOOL_END;
-    SSPOOL = PTPOOL_END+sizeof(unsigned int)*POOLSZIE;
-    SSPOOL_END = SSPOOL + sizeof(STACK_STRUCT)*PID_SIZE;
+    // SSPOOL = PTPOOL_END+sizeof(unsigned int)*POOLSZIE;
+    // SSPOOL_END = SSPOOL + sizeof(STACK_STRUCT)*PID_SIZE;
+
+    SSPOOL = (char*)x3;
+    SSPOOL_END = SSPOOL + sizeof(STACK_STRUCT)*PID_SIZE + sizeof(CRED_STRUCT)*PID_SIZE;
+
     UNUSED = 0;
     USED = INDEXNULL;
     //初始化安全内存双向链表
@@ -141,19 +165,49 @@ uintptr_t rkp_pagetable_manange_init(u_register_t x1,u_register_t x2,u_register_
             SET_NEXT_INDEX(PTMAP[i], i+1);
         }
     }
-    // tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                // (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x83038303);
+
+    stack_struct_table = (STACK_STRUCT *)SSPOOL; 
+    for(int i = 0; i < PID_SIZE; ++i)
+    {
+        stack_struct_table[i].pid = 0;
+        stack_struct_table[i].state = 0;
+        stack_struct_table[i].stack = 0;
+    }
+
+    cred_struct_table = (CRED_STRUCT *) (SSPOOL + sizeof(STACK_STRUCT) * PID_SIZE);
+    for(int i = 0; i < PID_SIZE; ++i)
+    {
+        cred_struct_table[i].pid = 0;
+        cred_struct_table[i].task_struct_addr = 0;
+        cred_struct_table[i].cred_addr = 0;
+        cred_struct_table[i].pgd = 0;
+        cred_struct_table[i].uid = 10000;
+        cred_struct_table[i].gid = 10000;
+        cred_struct_table[i].suid = 10000;
+        cred_struct_table[i].sgid = 10000;
+        cred_struct_table[i].euid = 10000;
+        cred_struct_table[i].egid = 10000;
+    }
+
+    tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
+                (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1,TZC_REGION_S_RDWR,0x83038303);
     // tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
     //             (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE + sizeof(STACK_STRUCT) * PID_SIZE -1,TZC_REGION_S_RDWR,0x83038303);
-    tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
-                (unsigned long long )SSPOOL_END -1,TZC_REGION_S_RDWR,0x83038303);
+    // tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )PTPOOL,
+    //             (unsigned long long )SSPOOL_END -1,TZC_REGION_S_RDWR,0x83038303);
+    tzc_configure_region((uint32_t)0x1,(uint8_t)3U,(unsigned long long )SSPOOL,
+                (unsigned long long )SSPOOL_END -1,TZC_REGION_S_RDWR,0x8303);
+
     ALLOCED_PAGE_NUM = 0;
     POOLINITED = 1;
     result = 0;
     ERROR("PTM Initialized start: 0x%016llx end: 0x%016llx\n",(unsigned long long )PTPOOL, (unsigned long long )PTPOOL_END+sizeof(unsigned int)*POOLSZIE-1);
+    ERROR("SSPOOL Initialized start: 0x%016llx end: 0x%016llx\n",(unsigned long long )SSPOOL, (unsigned long long )SSPOOL_END - 1);
+
     finished:
     SMC_RET1(handle,result);
 }
+
 //分配页表
 uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
@@ -202,6 +256,7 @@ uintptr_t rkp_pagetable_manange_get_a_pagetable(u_register_t x1,u_register_t x2,
     finished:
     SMC_RET2(handle,result,(unsigned long)pa_result);
 }
+
 //释放页表
 uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
@@ -245,6 +300,7 @@ uintptr_t rkp_pagetable_manange_release_a_pagetable(u_register_t x1,u_register_t
     finished:
     SMC_RET1(handle,result);
 }
+
 //禁止双重映射
 void Forbid_double_mapping(unsigned long content)
 {
@@ -260,6 +316,7 @@ void Forbid_double_mapping(unsigned long content)
     }
 	return;
 }
+
 //设置页表内容
 uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
@@ -276,6 +333,7 @@ uintptr_t rkp_set_pagetable(u_register_t x1,u_register_t x2,u_register_t x3,u_re
     result = 0;
     SMC_RET1(handle,result);
 }
+
 //指令模拟
 uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     unsigned long result = -1;
@@ -442,12 +500,14 @@ uintptr_t rkp_instruction_simulation(u_register_t x1,u_register_t x2,u_register_
     }
     SMC_RET1(handle,result);
 }
+
 //清除页表内容
 uintptr_t rkp_clear_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     void * targetPage_pa_va = (void *)x1;
     memset(targetPage_pa_va, 0, PAGE_SIZE);
     SMC_RET1(handle,0);
 }
+
 //复制页表
 uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     char * to = (char*)x1;
@@ -457,6 +517,7 @@ uintptr_t rkp_copy_page(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
     memcpy(to,from,n);
     SMC_RET2(handle,0,n);
 }
+
 //内存设置
 uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     void * result;
@@ -468,7 +529,7 @@ uintptr_t rkp_mem_set(u_register_t x1,u_register_t x2,u_register_t x3,u_register
 uintptr_t rkp_set_roaddr(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     ro_start = (unsigned long long)x1;
     ro_end = (unsigned long long)x2;
-    ERROR("text_start：%016llx, end:%016llx\n",ro_start,ro_end);
+    ERROR("text_start: %016llx, end:%016llx\n",ro_start,ro_end);
     SMC_RET1(handle,0);
 }
 //设置双重映射保护的标志
@@ -476,6 +537,7 @@ uintptr_t rkp_set_forbid_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_
     forbid_flag = 1;
     SMC_RET1(handle,0);
 }
+
 //设置pxn位
 uintptr_t rkp_set_pxn(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle){
     //取出Normal World传来的物理地址
@@ -642,7 +704,7 @@ uintptr_t pkm_protect_key_code(u_register_t x1,u_register_t x2,u_register_t x3,u
 
     if(check_flag == 0)
     {
-        for(int i = 0; i<GROUP_SIZE; i++)
+        for(int i = 0; i < GROUP_SIZE; i++)
         {
             sha256_init(&ctx);
 	        sha256_update(&ctx, (BYTE *)(start + i), (long long)end-(long long)start-i);
@@ -750,56 +812,101 @@ uintptr_t set_push_flag(u_register_t x1,u_register_t x2,u_register_t x3,u_regist
 
 
 // 保护内核栈的结构体
-// static STACK_STRUCT * stack_struct_hash;
-static STACK_STRUCT stack_struct_hash[PID_SIZE];
-static int stack_struct_hash_size = 0;
+// static STACK_STRUCT * stack_struct_table;
+// static STACK_STRUCT stack_struct_table[PID_SIZE];
+// static int stack_struct_table_size = 0;
 // static short pid_array[PID_SIZE];
-// static unsigned long long stack_struct_hash[PID_SIZE];
+// static unsigned long long stack_struct_table[PID_SIZE];
+
+
+uintptr_t visit_stack_struct(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    for(int i = 0; i < stack_struct_table_size; i++)
+    {
+        // if(stack_struct_table[i].state == 1)
+        //     ERROR("pid: %d, stack:0x%016lx\n", i, stack_struct_table[i].stack);
+        ERROR("pid:%d, state:%d, stack:0x%016lx\n", stack_struct_table[i].pid, (int)stack_struct_table[i].state, stack_struct_table[i].stack);
+    }
+    SMC_RET1(handle, 1);
+}
 
 void visit_pid_and_stack()
 {
-    for(int i = 0; i < stack_struct_hash_size; i++)
+    ERROR("size:%d \n", stack_struct_table_size);
+    for(int i = 0; i < stack_struct_table_size; i++)
     {
-        // if(stack_struct_hash[i].state == 1)
-        //     ERROR("pid: %d, stack:0x%016lx\n", i, stack_struct_hash[i].stack);
-        ERROR("pid:%d, state:%d, stack:0x%016lx\n", stack_struct_hash[i].pid, (int)stack_struct_hash[i].state, stack_struct_hash[i].stack);
+        // if(stack_struct_table[i].state == 1)
+        //     ERROR("pid: %d, stack:0x%016lx\n", i, stack_struct_table[i].stack);
+        ERROR("pid:%d, state:%d, stack:0x%016lx\n", stack_struct_table[i].pid, (int)stack_struct_table[i].state, stack_struct_table[i].stack);
     }
 }
 
 //设置进程标识对应的内核栈基地址
 uintptr_t set_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
 {
-    stack_struct_hash[stack_struct_hash_size].state = 1;
-    stack_struct_hash[stack_struct_hash_size].pid = (short)x1;
-    stack_struct_hash[stack_struct_hash_size].stack = (unsigned long)x2;
-    ERROR("size: %d, set  pid: %d, state:%d, stack:0x%016lx\n", stack_struct_hash_size, stack_struct_hash[stack_struct_hash_size].pid, 
-        (int)stack_struct_hash[stack_struct_hash_size].state, stack_struct_hash[stack_struct_hash_size].stack);
-    stack_struct_hash_size++;
-    // stack_struct_hash[x1].state = 1;
-    // stack_struct_hash[x1].stack = (unsigned long)x2;
-    // ERROR("set  pid: %d, state:%d, stack:0x%016lx\n", (int)x1, (int)stack_struct_hash[x1].state,stack_struct_hash[x1].stack);
+    if ((short)x1 == 0)
+    {
+        for(int i = 0; i < stack_struct_table_size; ++i)
+        {
+            if(stack_struct_table[i].pid == 0)
+            {
+                tzc_configure_region((uint32_t)0x0,(uint8_t)3U,stack_struct_table[i].stack,stack_struct_table[i].stack + STACK_SIZE - 1,0,0);
+                stack_struct_table[i].stack = (unsigned long)x2;
+                SMC_RET1(handle, 1);
+            }
+        }
+    }
+    if (stack_struct_table_size >= PID_SIZE)
+    {
+        ERROR("stack_struct_table_size >= PID_SIZE");
+        panic();
+    }
+    stack_struct_table[stack_struct_table_size].state = 1;
+    stack_struct_table[stack_struct_table_size].pid = (short)x1;
+    stack_struct_table[stack_struct_table_size].stack = (unsigned long)x2;
+    // char *start = (char *)stack_struct_table[stack_struct_table_size].stack;
+    // SHA256_CTX ctx;
+    // BYTE new_hash[SHA256_BLOCK_SIZE];
+    // sha256_init(&ctx);
+	// sha256_update_stack(&ctx, (BYTE *)start, STACK_SIZE - 1);
+    // sha256_final(&ctx, new_hash);
+    // memcpy(stack_struct_table[stack_struct_table_size].hash, new_hash, SHA256_BLOCK_SIZE);
+    stack_struct_table_size++;
+    // ERROR("size: %d, set  pid: %d, state:%d, stack:0x%016lx\n", stack_struct_table_size, stack_struct_table[stack_struct_table_size - 1].pid, 
+    //     (int)stack_struct_table[stack_struct_table_size - 1].state, stack_struct_table[stack_struct_table_size - 1].stack);
+    // for(int i = 0; i < SHA256_BLOCK_SIZE; ++i)
+    // {
+    //     printf("%02x", stack_struct_table[stack_struct_table_size - 1].hash[i]);
+    // }
+    // printf("\n");
+    // stack_struct_table[x1].state = 1;
+    // stack_struct_table[x1].stack = (unsigned long)x2;
+    // ERROR("set  pid: %d, state:%d, stack:0x%016lx\n", (int)x1, (int)stack_struct_table[x1].state,stack_struct_table[x1].stack);
     SMC_RET1(handle, 1);
 }
 
 //释放进程标识对应的内核栈基地址
 uintptr_t free_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
 {
-    for(int i = stack_struct_hash_size - 1; i >= 0; --i)
+    for(int i = stack_struct_table_size - 1; i >= 0; --i)
     {
-        if(stack_struct_hash[i].pid == (short)x1)
+        if(stack_struct_table[i].pid == (short)x1)
         {
-            ERROR("size: %d, free  pid: %d, state:%d\n", stack_struct_hash_size, (short)stack_struct_hash[i].pid, (int)stack_struct_hash[i].state);
-            if(i != stack_struct_hash_size - 1)
+            //ERROR("loc: %d, size: %d, free  pid: %d, state:%d\n", i, stack_struct_table_size, (short)stack_struct_table[i].pid, (int)stack_struct_table[i].state);
+            if(i != stack_struct_table_size - 1)
             {
-                stack_struct_hash[i].pid = stack_struct_hash[stack_struct_hash_size - 1].pid;
-                stack_struct_hash[i].state = stack_struct_hash[stack_struct_hash_size - 1].state;
-                stack_struct_hash[i].stack = stack_struct_hash[stack_struct_hash_size - 1].stack;
+                //ERROR("size-1: pid: %d, state: %d, stack: 0x%016lx", (short)stack_struct_table[stack_struct_table_size - 1].pid, (int)stack_struct_table[stack_struct_table_size - 1].state, stack_struct_table[stack_struct_table_size - 1].stack);
+                tzc_configure_region((uint32_t)0x0,(uint8_t)3U,stack_struct_table[i].stack,stack_struct_table[i].stack + STACK_SIZE - 1,0,0);
+                stack_struct_table[i].pid = stack_struct_table[stack_struct_table_size - 1].pid;
+                stack_struct_table[i].state = stack_struct_table[stack_struct_table_size - 1].state;
+                stack_struct_table[i].stack = stack_struct_table[stack_struct_table_size - 1].stack;
             }
-            stack_struct_hash_size--;
+            stack_struct_table_size--;
+            //visit_pid_and_stack();
             break;
         }
     }
-    // ERROR("free  pid: %d, state:%d\n", (int)x1, (int)stack_struct_hash[x1].state);
+    // ERROR("free  pid: %d, state:%d\n", (int)x1, (int)stack_struct_table[x1].state);
     SMC_RET1(handle, 1);
 }
 
@@ -807,37 +914,33 @@ uintptr_t free_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_r
 uintptr_t init_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
 {
     printf("init\n\n");
-    // stack_struct_hash = (STACK_STRUCT *) SSPOOL; 
-    // ERROR("aaaaaaaa %d, 0x%016lx", stack_struct_hash[0].state, stack_struct_hash[0].stack);
-    // for(int i = 0; i < 10; i++)
-    // {
-    //     stack_struct_hash[i].state = 0;
-    //     stack_struct_hash[i].stack = (unsigned long)NULL;
-    // }
-    // visit_pid_and_stack();
+    unsigned long sspool_addr = (unsigned long)SSPOOL;
+    stack_struct_table = (STACK_STRUCT *) sspool_addr; 
+    //ERROR("aaaaaaaa %d, 0x%016lx", stack_struct_table[0].state, stack_struct_table[0].stack);
+    for(int i = 0; i < PID_SIZE; ++i)
+    {
+        stack_struct_table[i].pid = 0;
+        stack_struct_table[i].state = 0;
+        stack_struct_table[i].stack = 0;
+    }
+    visit_pid_and_stack();
     SMC_RET1(handle, 1);
 }
 
-//检查内核栈基地址是否与存储值相同
-bool check_stack(int pid, unsigned long long stack_addr)
-{
-    if(stack_struct_hash[pid].stack != stack_addr)
-        return false;
-    return true;
-}
 
-// //检查内核栈hash值是否与之前相同
-// bool check_hash(int pid, unsigned long long stack_addr)
-// {
-//     SHA256_CTX ctx;
-//     BYTE new_hash[SHA256_BLOCK_SIZE];
-//     sha256_init(&ctx);
-// 	sha256_update_stack(&ctx, (BYTE *)stack_addr, STACK_SIZE - 1);
-//     sha256_final(&ctx, new_hash);
-//     if (memcmp(stack_struct_hash[pid].hash,new_hash,SHA256_BLOCK_SIZE) == 0)
-//         return true;
-//     return false;
-// }
+//检查内核栈hash值是否与之前相同
+bool check_hash(int loc, unsigned long stack_addr)
+{
+    char *start = (char *)stack_addr;
+    SHA256_CTX ctx;
+    BYTE new_hash[SHA256_BLOCK_SIZE];
+    sha256_init(&ctx);
+	sha256_update_stack(&ctx, (BYTE *)start, STACK_SIZE - 1);
+    sha256_final(&ctx, new_hash);
+    if (memcmp(stack_struct_table[loc].hash, new_hash, SHA256_BLOCK_SIZE) == 0)
+        return true;
+    return false;
+}
 
 // //进程切换时保存内核栈hash值
 // uintptr_t set_stack_hash(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
@@ -850,16 +953,83 @@ bool check_stack(int pid, unsigned long long stack_addr)
 //     SHA256_CTX ctx;
 //     BYTE new_hash[SHA256_BLOCK_SIZE];
 //     sha256_init(&ctx);
-// 	sha256_update_stack(&ctx, (BYTE *)stack_struct_hash[x1].stack, STACK_SIZE - 1);
+// 	sha256_update_stack(&ctx, (BYTE *)stack_struct_table[x1].stack, STACK_SIZE - 1);
 //     sha256_final(&ctx, new_hash);
-//     memcpy(stack_struct_hash[x1].hash, new_hash, SHA256_BLOCK_SIZE);
+//     memcpy(stack_struct_table[x1].hash, new_hash, SHA256_BLOCK_SIZE);
 //     SMC_RET1(handle, 1);
 // }
+
 
 //进程切换后被切换的进程
 uintptr_t switch_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
 {
-
+    //ERROR("Switch Start, prev pid: %d, stack:0x%016lx, next pid:%d, stack:0x%016lx\n", (short)x1, (unsigned long)x2, (short)x3, (unsigned long)x4);
+    // unsigned long stack_addr = (unsigned long)x4;
+    // char *start = (char *)stack_addr;
+    // SHA256_CTX ctx;
+    // BYTE new_hash[SHA256_BLOCK_SIZE];
+    // sha256_init(&ctx);
+	// sha256_update_stack(&ctx, (BYTE *)start, STACK_SIZE - 1);
+    // sha256_final(&ctx, new_hash);
+    // for(int i = 0; i < SHA256_BLOCK_SIZE; ++i)
+    // {
+    //     printf("%02x", new_hash[i]);
+    // }
+    // printf("\n");
+    // count++;
+    //int loc = 0;
+    for (int i = 0; i < stack_struct_table_size; ++i)
+    {
+        if ((short)x3 != 0 && stack_struct_table[i].pid == (short)x3)
+        {
+            //loc = i;
+            if (stack_struct_table[i].stack != (unsigned long)x4)
+            {
+                ERROR("Stack is not the origin stack, pid: %d, old:0x%016lx, new:0x%016lx\n", (short)x3, stack_struct_table[i].stack, (unsigned long)x4);
+                SMC_RET1(handle, 0);
+            }
+        }
+        else if((short)x3 != 0 && (unsigned long)x4 == stack_struct_table[i].stack)
+        {
+            ERROR("Stack reuse, pid in list: %d, stack:0x%016lx, next pid:%d, stack:0x%016lx\n", stack_struct_table[i].pid, stack_struct_table[i].stack, (short)x3, (unsigned long)x4);
+            SMC_RET1(handle, 0);
+        }
+    }
+    tzc_configure_region((uint32_t)0x1,(uint8_t)3U,x2,x2 + STACK_SIZE - 1,TZC_REGION_S_RDWR,0x8303);
+    //test
+    //tzc_configure_region((uint32_t)0x1,(uint8_t)3U,x4,x4 + STACK_SIZE - 1,TZC_REGION_S_RDWR,0x8303);
+    tzc_configure_region((uint32_t)0x0,(uint8_t)3U,x4,x4,0,0);
+    // if(count == 30)
+    //     panic();
+    // if((short)x3 != 0 && !check_hash(loc, (unsigned long)x4))
+    // {
+    //     // char *old = (char *)stack_struct_table[loc].stack;
+    //     // char *new = (char *)x4;
+    //     // for(int i = 15360; i < 16384; ++i)
+    //     // {
+    //     //     ERROR("old:%d:0x%016lx new:0x%016lx\n", i, (unsigned long)(*old), (unsigned long)(*new));
+    //     //     old++;
+    //     //     new++;
+    //     // }
+    //     // panic();
+    //     ERROR("Stack is modified, prev pid: %d, stack:0x%016lx, next pid:%d, stack:0x%016lx", (short)x1, (unsigned long)x2, (short)x3, (unsigned long)x4);
+    //     SMC_RET1(handle, 0);
+    // }
+    // for (int i = 0; i < stack_struct_table_size; ++i)
+    // {
+    //     if (stack_struct_table[i].pid == (short)x1)
+    //     {
+    //         loc = i;
+    //         break;
+    //     }
+    // }
+    // SHA256_CTX ctx;
+    // BYTE new_hash[SHA256_BLOCK_SIZE];
+    // sha256_init(&ctx);
+	// sha256_update_stack(&ctx, (BYTE *)stack_struct_table[loc].stack, STACK_SIZE - 1);
+    // sha256_final(&ctx, new_hash);
+    // memcpy(stack_struct_table[loc].hash, new_hash, SHA256_BLOCK_SIZE);
+    // ERROR("Switch Complete");
     SMC_RET1(handle, 1);
 }
 
@@ -878,3 +1048,142 @@ uintptr_t switch_pid_and_stack(u_register_t x1,u_register_t x2,u_register_t x3,u
 //     }
 //     SMC_RET1(handle, 1);
 // }
+
+
+//设置进程凭证
+uintptr_t set_cred(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    for(int i = 0; i < cred_struct_table_size; ++i)
+    {
+        if(cred_struct_table[i].pid == (short)x1)
+        {
+            cred_struct_table[cred_struct_table_size].task_struct_addr = (unsigned long)x2;
+            cred_struct_table[cred_struct_table_size].cred_addr = (unsigned long)x3;
+            cred_struct_table[cred_struct_table_size].uid = *((unsigned int *)((unsigned long)x3 + 4));
+            cred_struct_table[cred_struct_table_size].gid = *((unsigned int *)((unsigned long)x3 + 8));
+            cred_struct_table[cred_struct_table_size].suid = *((unsigned int *)((unsigned long)x3 + 12));
+            cred_struct_table[cred_struct_table_size].sgid = *((unsigned int *)((unsigned long)x3 + 16));
+            cred_struct_table[cred_struct_table_size].euid = *((unsigned int *)((unsigned long)x3 + 20));
+            cred_struct_table[cred_struct_table_size].egid = *((unsigned int *)((unsigned long)x3 + 24));
+            cred_struct_table[cred_struct_table_size].pgd = (unsigned long)x4;
+            SMC_RET1(handle, 1);
+        }
+    }
+    if (cred_struct_table_size >= PID_SIZE)
+    {
+        ERROR("cred_struct_table_size >= PID_SIZE");
+        panic();
+    }
+    cred_struct_table[cred_struct_table_size].pid = (short)x1;
+    cred_struct_table[cred_struct_table_size].task_struct_addr = (unsigned long)x2;
+    cred_struct_table[cred_struct_table_size].cred_addr = (unsigned long)x3;
+    // ERROR("pid:%d, task_addr: %016lx, cred_addr:%016lx", cred_struct_table[cred_struct_table_size].pid, cred_struct_table[cred_struct_table_size].task_struct_addr, cred_struct_table[cred_struct_table_size].cred_addr);
+    // ERROR("0x%016lx", (unsigned long)x3 + 4);
+    // unsigned int *a = (unsigned int *)((unsigned long)x3 + 4);
+    // short *a = (short *)((unsigned long)x2 + 1120);
+    // ERROR("pid: %d ", *a);
+    // ERROR("pid: %u, addr:0x%016lx", *a, (unsigned long)a);
+    cred_struct_table[cred_struct_table_size].uid = *((unsigned int *)((unsigned long)x3 + 4));
+    cred_struct_table[cred_struct_table_size].gid = *((unsigned int *)((unsigned long)x3 + 8));
+    cred_struct_table[cred_struct_table_size].suid = *((unsigned int *)((unsigned long)x3 + 12));
+    cred_struct_table[cred_struct_table_size].sgid = *((unsigned int *)((unsigned long)x3 + 16));
+    cred_struct_table[cred_struct_table_size].euid = *((unsigned int *)((unsigned long)x3 + 20));
+    cred_struct_table[cred_struct_table_size].egid = *((unsigned int *)((unsigned long)x3 + 24));
+    cred_struct_table[cred_struct_table_size].pgd = (unsigned long)x4;
+
+    ERROR("pid:%d, cred: 0x%016lx, uid:%u, gid:%u, suid:%u, sgid:%u, euid:%u, egid:%u\n", cred_struct_table[cred_struct_table_size].pid, cred_struct_table[cred_struct_table_size].cred_addr, cred_struct_table[cred_struct_table_size].uid, cred_struct_table[cred_struct_table_size].gid, cred_struct_table[cred_struct_table_size].suid, cred_struct_table[cred_struct_table_size].sgid, cred_struct_table[cred_struct_table_size].euid, cred_struct_table[cred_struct_table_size].egid);
+    cred_struct_table_size++;
+    
+    SMC_RET1(handle, 1);
+}
+
+//检查进程凭证
+uintptr_t check_cred(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    unsigned int uid =  *((unsigned int *)((unsigned long)x3 + 4));
+    unsigned int gid =  *((unsigned int *)((unsigned long)x3 + 8));
+    unsigned int suid =  *((unsigned int *)((unsigned long)x3 + 12));
+    unsigned int sgid =  *((unsigned int *)((unsigned long)x3 + 16));
+    unsigned int euid =  *((unsigned int *)((unsigned long)x3 + 20));
+    unsigned int egid =  *((unsigned int *)((unsigned long)x3 + 24));
+    for (int i = 0; i < cred_struct_table_size; ++i)
+    {
+        if (cred_struct_table[i].pid == (short)x1)
+        {
+            if (cred_struct_table[i].cred_addr != (unsigned long)x3)
+            {
+                ERROR("cred_addr is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].task_struct_addr != (unsigned long)x2)
+            {
+                ERROR("task_struct_addr is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].pgd != (unsigned long)x4)
+            {
+                ERROR("pgd is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].uid != uid)
+            {
+                ERROR("uid is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].gid != gid)
+            {
+                ERROR("gid is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].suid != suid)
+            {
+                ERROR("suid is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].sgid != sgid)
+            {
+                ERROR("sgid is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].euid != euid)
+            {
+                ERROR("euid is not origin");
+                panic();
+            }
+            else if (cred_struct_table[i].egid != egid)
+            {
+                ERROR("egid is not origin");
+                panic();
+            }
+        }
+    }
+    SMC_RET1(handle, 1);
+}
+
+//释放进程凭证
+uintptr_t free_cred(u_register_t x1,u_register_t x2,u_register_t x3,u_register_t x4,void *handle)
+{
+    for(int i = cred_struct_table_size - 1; i >= 0; --i)
+    {
+        if(cred_struct_table[i].pid == (short)x1)
+        {
+            ERROR("free_cred size: %d, free  pid: %d\n", cred_struct_table_size, (short)cred_struct_table[i].pid);
+            if(i != cred_struct_table_size - 1)
+            {
+                cred_struct_table[i].pid = cred_struct_table[cred_struct_table_size - 1].pid;
+                cred_struct_table[i].task_struct_addr = cred_struct_table[cred_struct_table_size - 1].task_struct_addr;
+                cred_struct_table[i].cred_addr = cred_struct_table[cred_struct_table_size - 1].cred_addr;
+                cred_struct_table[i].pgd = cred_struct_table[cred_struct_table_size - 1].pgd;
+                cred_struct_table[i].uid = cred_struct_table[cred_struct_table_size - 1].uid;
+                cred_struct_table[i].gid = cred_struct_table[cred_struct_table_size - 1].gid;
+                cred_struct_table[i].suid = cred_struct_table[cred_struct_table_size - 1].suid;
+                cred_struct_table[i].sgid = cred_struct_table[cred_struct_table_size - 1].sgid;
+                cred_struct_table[i].euid = cred_struct_table[cred_struct_table_size - 1].euid;
+                cred_struct_table[i].egid = cred_struct_table[cred_struct_table_size - 1].egid;
+            }
+            cred_struct_table_size--;
+            break;
+        }
+    }
+    SMC_RET1(handle, 1);
+}
